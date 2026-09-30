@@ -7,10 +7,10 @@ import {
 const AuthContext = createContext(null);
 
 export default function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => getSession()?.user ?? null);
+  const [session, setSession] = useState(() => getSession());
 
   useEffect(() => {
-    const syncSession = () => setUser(getSession()?.user ?? null);
+    const syncSession = () => setSession(getSession());
     window.addEventListener(AUTH_CHANGED_EVENT, syncSession);
     window.addEventListener("storage", syncSession);
     return () => {
@@ -19,11 +19,20 @@ export default function AuthProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session) return;
+    const timer = window.setTimeout(() => {
+      if (!getSession()) clearSession();
+      else setSession(getSession());
+    }, Math.min(Math.max(session.expiresAt - Date.now(), 0), 2147483647));
+    return () => window.clearTimeout(timer);
+  }, [session]);
+
   async function authenticate(action, credentials) {
     try {
       const { token, user } = await action(credentials);
       saveSession(token, user);
-      setUser(user);
+      setSession(getSession());
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -35,11 +44,13 @@ export default function AuthProvider({ children }) {
 
   function logout() {
     clearSession();
-    setUser(null);
+    setSession(null);
   }
 
   return (
-    <AuthContext.Provider value={{ signUp, user, logout, login }}>
+    <AuthContext.Provider value={{ signUp, user: session?.user ?? null, logout, login,
+      roles: session?.user.roles ?? [], isAdmin: session?.user.roles.includes("Admin") ?? false,
+      isAuthenticated: !!session, sessionKey: session?.token ?? "" }}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   return (
     <nav className="navbar">
       <div className="navbar-container">
@@ -16,6 +16,7 @@ export default function Navbar() {
           <Link to="/checkout" className="navbar-link">
             Cart
           </Link>
+          {isAdmin && <Link to="/admin/products" className="navbar-link">Manage products</Link>}
         </div>
         <div className="navbar-auth">
           {!user ? (

@@ -1,11 +1,15 @@
+import { readJwt } from "./jwt";
+
 const SESSION_KEY = "shopHub.auth";
 export const AUTH_CHANGED_EVENT = "shopHub:auth-changed";
 
 export function getSession() {
   try {
     const session = JSON.parse(localStorage.getItem(SESSION_KEY));
-    return typeof session?.token === "string" && session.token.trim()
-      && typeof session?.user?.email === "string" ? session : null;
+    const claims = readJwt(session?.token);
+    return claims && typeof session?.user?.email === "string"
+      ? { token: session.token, expiresAt: claims.expiresAt,
+        user: { email: session.user.email, roles: claims.roles } } : null;
   } catch {
     return null;
   }

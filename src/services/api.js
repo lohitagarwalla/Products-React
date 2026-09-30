@@ -12,25 +12,33 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(path, { auth = true, json, ...options } = {}) {
+export function apiUrl(path) {
   const baseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
   if (!baseUrl) throw new Error("VITE_API_BASE_URL is not configured.");
   // Only backend paths are accepted, never arbitrary external URLs.
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) {
     throw new Error("API paths must start with a single '/'.");
   }
+  return `${baseUrl}${path}`;
+}
+
+export async function apiRequest(path, { auth = true, json, responseType = "json", ...options } = {}) {
+  const url = apiUrl(path);
   const headers = new Headers(options.headers);
   const token = auth ? getSession()?.token : null;
   headers.delete("Authorization");
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (json !== undefined) headers.set("Content-Type", "application/json");
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetch(url, {
     ...options, headers,
     ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
   });
   // An old request must not clear a newer login.
   if (response.status === 401 && token && getSession()?.token === token) {
     clearSession();
+  }
+  if (response.ok && responseType === "blob") {
+    return { status: response.status, data: await response.blob() };
   }
   const text = await response.text();
   let data = text || null;

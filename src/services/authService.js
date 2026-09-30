@@ -1,4 +1,5 @@
 import { apiRequest } from "./api";
+import { readJwt } from "./jwt";
 
 // Match these paths to your .NET controller routes.
 const endpoints = { login: "/api/auth/login", signUp: "/api/auth/register" };
@@ -9,6 +10,7 @@ function readSession(data, email) {
   if (typeof data?.token !== "string" || !data.token.trim()) {
     throw new Error("The authentication response did not contain a token.");
   }
+  if (!readJwt(data.token)) throw new Error("The authentication token is invalid or expired. Please log in again.");
   return { token: data.token, user: { email: data.email || email } };
 }
 

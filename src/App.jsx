@@ -9,6 +9,9 @@ import "./App.css";
 import AuthProvider from "./context/AuthContext";
 import ProductDetails from "./pages/ProductDetails";
 import CartProvider from "./context/CartContext";
+import AdminRoute from "./components/AdminRoute";
+import ProductList from "./pages/admin/ProductList";
+import ProductEditor from "./pages/admin/ProductEditor";
 
 function App() {
   return (
@@ -23,6 +26,11 @@ function App() {
             <Route path="/auth" element={<Navigate to="/signup" replace />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/products/:id" element={<ProductDetails />} />
+            <Route element={<AdminRoute />}>
+              <Route path="/admin/products" element={<ProductList />} />
+              <Route path="/admin/products/new" element={<ProductEditor />} />
+              <Route path="/admin/products/:id/edit" element={<ProductEditor />} />
+            </Route>
           </Routes>
         </div>
       </CartProvider>

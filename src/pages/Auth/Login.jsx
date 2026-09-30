@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Login() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const {
     register,
@@ -17,7 +18,8 @@ export default function Login() {
     setError(null);
     const result = await login(data);
     if (result.success) {
-      navigate("/");
+      const from = location.state?.from;
+      navigate(typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/", { replace: true });
     } else {
       setError(result.error);
     }

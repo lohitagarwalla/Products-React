@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "vite";
 
+const jwt = label => `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600, label })).toString("base64url")}.signature`;
+const testToken = jwt("test");
+const oldToken = jwt("old");
+const newToken = jwt("new");
+
 test("JWT requests, response statuses, and session lifecycle", async () => {
   const server = await createServer({
     configFile: false,
     optimizeDeps: { noDiscovery: true, include: [] },
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, hmr: false, ws: false },
     appType: "custom",
   });
   const originals = {
@@ -36,10 +41,10 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
       status, headers: { "Content-Type": "application/json" },
     });
 
-    storage.saveSession("test-jwt", { email: "test@example.com" });
+    storage.saveSession(testToken, { email: "test@example.com" });
     nextResponse = json([{ id: 1 }]);
     assert.deepEqual(await apiRequest("/api/products"), { status: 200, data: [{ id: 1 }] });
-    assert.equal(request.headers.get("Authorization"), "Bearer test-jwt");
+    assert.equal(request.headers.get("Authorization"), `Bearer ${testToken}`);
 
     const credentials = { email: "test@example.com", password: "password" };
     const registration = {
@@ -49,9 +54,9 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
       [auth.login, "/api/auth/login", credentials],
       [auth.signUp, "/api/auth/register", registration],
     ]) {
-      nextResponse = json({ token: "new-jwt" }, 201);
+      nextResponse = json({ token: newToken }, 201);
       assert.deepEqual(await method(registration), {
-        token: "new-jwt", user: { email: "test@example.com" },
+        token: newToken, user: { email: "test@example.com" },
       });
       assert.equal(request.headers.has("Authorization"), false);
       assert.equal(request.method, "POST");
@@ -70,29 +75,29 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
       nextResponse = json({ title: "Expected error" }, status);
       await assert.rejects(apiRequest("/api/products"), error =>
         error instanceof ApiError && error.status === status && error.message === "Expected error");
-      assert.equal(storage.getSession().token, "test-jwt");
+      assert.equal(storage.getSession().token, testToken);
     }
     nextResponse = json({ errors: { Email: ["Invalid email"] } }, 400);
     await assert.rejects(apiRequest("/api/products"), /Invalid email/);
 
     nextResponse = new Response(null, { status: 401 });
     await assert.rejects(auth.login(credentials));
-    assert.equal(storage.getSession().token, "test-jwt");
+    assert.equal(storage.getSession().token, testToken);
     nextResponse = new Response(null, { status: 401 });
     await assert.rejects(apiRequest("/api/products"), error => error.status === 401);
     assert.equal(storage.getSession(), null);
 
-    storage.saveSession("old-jwt", { email: "test@example.com" });
+    storage.saveSession(oldToken, { email: "test@example.com" });
     globalThis.fetch = async () => {
-      storage.saveSession("new-jwt", { email: "test@example.com" });
+      storage.saveSession(newToken, { email: "test@example.com" });
       return new Response(null, { status: 401 });
     };
     await assert.rejects(apiRequest("/api/products"));
-    assert.equal(storage.getSession().token, "new-jwt");
+    assert.equal(storage.getSession().token, newToken);
 
     globalThis.fetch = async () => { throw new TypeError("Failed to fetch"); };
     await assert.rejects(apiRequest("/api/products"), /Failed to fetch/);
-    assert.equal(storage.getSession().token, "new-jwt");
+    assert.equal(storage.getSession().token, newToken);
     await assert.rejects(apiRequest("https://other.example/api"), /API paths/);
     storage.clearSession();
     assert.equal(storage.getSession(), null);
