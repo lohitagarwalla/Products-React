@@ -13,7 +13,10 @@ export class ApiError extends Error {
 }
 
 export function apiUrl(path) {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
+  // const baseUrl =  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
+  const baseUrl = import.meta.env.DEV
+  ? window.location.origin
+  : import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
   if (!baseUrl) throw new Error("VITE_API_BASE_URL is not configured.");
   // Only backend paths are accepted, never arbitrary external URLs.
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) {

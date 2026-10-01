@@ -10,7 +10,6 @@ export default function ProductDetails() {
   const { id } = useParams();
   const { product, error, loading, reload, key } = useProduct(id);
   return <main className="page"><div className="container">
-    <Link to="/">Back to products</Link>
     {loading && <p role="status">Loading product…</p>}
     {error && <div role="alert" className="error-message">{error} <button className="btn btn-secondary" onClick={reload}>Retry</button></div>}
     {product && <Details key={key} product={product} />}

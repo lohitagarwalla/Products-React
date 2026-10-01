@@ -1,8 +1,18 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import ProductSearch from "./ProductSearch";
 
 export default function Navbar() {
   const { user, logout, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [params] = useSearchParams();
+  const search = pathname === "/" ? (params.get("search") || "").slice(0, 200) : "";
+
+  function searchProducts(value) {
+    const query = new URLSearchParams({ ...(value ? { search: value } : {}), page: "1" });
+    navigate({ pathname: "/", search: `?${query}` });
+  }
   return (
     <nav className="navbar">
       <div className="navbar-container">
@@ -17,6 +27,9 @@ export default function Navbar() {
             Cart
           </Link>
           {isAdmin && <Link to="/admin/products" className="navbar-link">Manage products</Link>}
+        </div>
+        <div className="navbar-search">
+          <ProductSearch key={pathname} search={search} onSearch={searchProducts} />
         </div>
         <div className="navbar-auth">
           {!user ? (
