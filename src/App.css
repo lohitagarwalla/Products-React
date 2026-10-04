@@ -27,6 +27,9 @@
 .product-table { width: 100%; border-collapse: collapse; background: #fff; }
 .product-table th, .product-table td { padding: 1rem; text-align: left; border-bottom: 1px solid #ddd; }
 .product-table th { background: #eaf0f5; }
+.price-history-panel h2 { margin-top: 1rem; }
+.price-history-panel .muted { margin-bottom: 1rem; }
+.price-history-table td:last-child { max-width: 260px; overflow-wrap: anywhere; }
 .product-cell { min-width: 230px; }
 .list-image { width: 76px; height: 76px; flex-shrink: 0; object-fit: cover; border-radius: 4px; }
 .image-placeholder { display: flex; align-items: center; justify-content: center; background: #e8edf1; color: #53606b; text-align: center; font-size: 0.85rem; }

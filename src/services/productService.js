@@ -22,6 +22,12 @@ export async function getProduct(id, { signal, auth = true } = {}) {
   return data;
 }
 
+export async function getProductPriceHistory(id, { page = 1, pageSize = 20, signal } = {}) {
+  const query = new URLSearchParams({ page, pageSize });
+  const { data } = await apiRequest(`${root}/${encodeURIComponent(id)}/price-history?${query}`, { auth: true, signal });
+  return data;
+}
+
 export function productPayload(product) {
   const validation = validatePrice(product.price);
   if (validation !== true) throw new Error(validation);

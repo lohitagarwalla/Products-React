@@ -26,6 +26,16 @@ for (const name of ["product-workflow-front.png", "product-workflow-back.png"]) 
   } catch { /* Image fixtures are optional. */ }
 }
 products.set(draft.id, draft);
+const priceHistory = new Map();
+let nextHistory = 1;
+function recordPrice(product, previousPrice, userId, entryType) {
+  const entries = priceHistory.get(product.id) || [];
+  entries.unshift({ id: nextHistory++, productId: product.id, previousPrice, newPrice: product.price,
+    changedByUserId: userId, changedByUserName: userId === "admin@example.test" ? "Fixture Admin" : null,
+    changedAtUtc: new Date().toISOString(), entryType });
+  priceHistory.set(product.id, entries);
+}
+for (const product of products.values()) recordPrice(product, null, null, "Baseline");
 const token = email => `fixture.${Buffer.from(JSON.stringify({ sub: email, exp: Math.floor(Date.now() / 1000) + 3600, [roleClaim]: email === "admin@example.test" ? "Admin" : "User" })).toString("base64url")}.test-only`;
 
 const server = await createServer({
@@ -56,6 +66,15 @@ const server = await createServer({
         try { isAdmin = JSON.parse(Buffer.from(req.headers.authorization.split(".")[1], "base64url").toString())[roleClaim] === "Admin"; } catch { /* Anonymous request */ }
         try { userId = JSON.parse(Buffer.from(req.headers.authorization.split(".")[1], "base64url").toString()).sub; } catch { /* Anonymous */ }
         if (handleOrders({ req, path, url, json, send, userId, isAdmin })) return;
+        const historyMatch = path.match(/^\/api\/products\/(\d+)\/price-history$/);
+        if (historyMatch && req.method === "GET") {
+          if (!isAdmin) return send(userId ? 403 : 401, { title: "Admin required" });
+          const entries = priceHistory.get(Number(historyMatch[1]));
+          if (!entries) return send(404, { title: "Product not found" });
+          const page = Number(url.searchParams.get("page") || 1);
+          const pageSize = Number(url.searchParams.get("pageSize") || 20);
+          return send(200, { items: entries.slice((page - 1) * pageSize, page * pageSize), totalCount: entries.length, page, pageSize });
+        }
         if ((req.method !== "GET" || path === "/api/products/manage") && !isAdmin) return send(req.headers.authorization ? 403 : 401, { title: "Admin required" });
         if (path === "/api/fixture/fail-next-upload" && req.method === "POST") { failNextUpload = true; return send(204); }
         if (path === "/api/products" || path === "/api/products/manage") {
@@ -70,6 +89,7 @@ const server = await createServer({
             const input = json();
             const product = { ...input, id: nextProduct++, createdAt: new Date().toISOString(), images: [] };
             products.set(product.id, product);
+            recordPrice(product, null, userId, "Created");
             return send(201, product);
           }
         }
@@ -86,7 +106,12 @@ const server = await createServer({
         if (!product || (req.method === "GET" && !product.isPublished && !isAdmin)) return send(404, { title: "Product not found" });
         if (!path.includes("/images")) {
           if (req.method === "GET") return send(200, product);
-          if (req.method === "PUT") { Object.assign(product, json()); return send(200, product); }
+          if (req.method === "PUT") {
+            const previousPrice = product.price;
+            Object.assign(product, json());
+            if (previousPrice !== product.price) recordPrice(product, previousPrice, userId, "PriceChanged");
+            return send(200, product);
+          }
           if (req.method === "DELETE") { products.delete(product.id); return send(204); }
         }
         if (req.method === "POST") {

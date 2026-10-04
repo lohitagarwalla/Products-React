@@ -1,4 +1,4 @@
-const moneyKeys = new Set(["price", "unitPrice", "lineTotal", "totalAmount"]);
+const moneyKeys = new Set(["price", "unitPrice", "lineTotal", "totalAmount", "previousPrice", "newPrice"]);
 
 // Match complete JSON strings so numbers inside descriptions are never rewritten.
 // Preserve money tokens before JSON.parse can round a .NET decimal into a Number.

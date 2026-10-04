@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import useProduct from "../../hooks/useProduct";
 import ProductForm from "../../components/ProductForm";
 import ProductImageManager from "../../components/ProductImageManager";
+import ProductPriceHistory from "../../components/ProductPriceHistory";
+import { toMinor } from "../../services/money";
 import { createProduct, updateProduct, deleteProduct, setPublished, productError } from "../../services/productService";
 
 export default function ProductEditor() {
@@ -25,6 +27,7 @@ function Editor({ initialProduct, reload }) {
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [historyRevision, setHistoryRevision] = useState(0);
   const actionInFlight = useRef(false);
   const navigate = useNavigate();
 
@@ -53,7 +56,10 @@ function Editor({ initialProduct, reload }) {
         : await createProduct({ ...values, isPublished: false });
       setDirty(false);
       if (!product) navigate(`/admin/products/${saved.id}/edit`, { replace: true });
-      else setProduct(saved);
+      else {
+        if (toMinor(product.price) !== toMinor(saved.price)) setHistoryRevision(value => value + 1);
+        setProduct(saved);
+      }
       return saved;
     }, "Product details saved.");
   }
@@ -73,6 +79,7 @@ function Editor({ initialProduct, reload }) {
       <ProductForm product={product} onSave={save} busy={busy} onDirtyChange={setDirty} />
     </section>
     {product && <>
+      <ProductPriceHistory productId={product.id} revision={historyRevision} />
       <ProductImageManager product={product} setProduct={setProduct} busy={busy} runAction={runAction} />
       <section className="panel"><h2>Publication</h2><p className="muted">Published products are visible to everyone. Drafts are visible only to Admins. Save product details before publishing.</p>
         <div className="toolbar">

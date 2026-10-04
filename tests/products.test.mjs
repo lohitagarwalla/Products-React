@@ -3,6 +3,18 @@ import { test } from "node:test";
 import { createServer } from "vite";
 import { readJwt } from "../src/services/jwt.js";
 import { validatePrice } from "../src/services/price.js";
+import { parseMoneyJson, fromMinor, toMinor } from "../src/services/money.js";
+
+test("history amounts retain decimal precision and nullable baseline fields", () => {
+  const data = parseMoneyJson('{"items":[{"previousPrice":9999999999999999.99,"newPrice":0.29},{"previousPrice":null,"newPrice":12,"changedByUserId":null}],"totalCount":2,"page":1,"pageSize":20}');
+  assert.equal(data.items[0].previousPrice, "9999999999999999.99");
+  assert.equal(fromMinor(toMinor(data.items[0].previousPrice)), "9999999999999999.99");
+  assert.equal(fromMinor(toMinor(data.items[0].newPrice)), "0.29");
+  assert.equal(data.items[1].previousPrice, null);
+  assert.equal(fromMinor(toMinor(data.items[1].newPrice)), "12.00");
+  assert.equal(data.items[1].changedByUserId, null);
+  assert.equal(data.page, 1);
+});
 
 const roleClaim = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
 const token = claims => `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600, ...claims })).toString("base64url")}.signature`;
@@ -48,6 +60,21 @@ test("product API contract, publication payload, multipart uploads, binary reads
     };
     const json = body => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
     const product = { id: 42, title: "Phone", brand: "Brand", description: "Details", price: 12.50, currency: "INR", isPublished: false, images: [] };
+
+    const controller = new AbortController();
+    replies.push(json({ items: [{ id: 1, newPrice: 100, changedByUserId: "actor-id", changedByUserName: "Ada Lovelace" }], totalCount: 21, page: 2, pageSize: 20 }));
+    const history = await products.getProductPriceHistory(42, { page: 2, signal: controller.signal });
+    assert.equal(requests.at(-1).url.pathname, "/api/products/42/price-history");
+    assert.equal(requests.at(-1).url.searchParams.get("page"), "2");
+    assert.equal(requests.at(-1).url.searchParams.get("pageSize"), "20");
+    assert.equal(requests.at(-1).headers.get("Authorization"), `Bearer ${adminToken}`);
+    assert.equal(requests.at(-1).signal, controller.signal);
+    assert.equal(history.totalCount, 21);
+    assert.equal(history.items[0].changedByUserName, "Ada Lovelace");
+    for (const status of [403, 404, 500]) {
+      replies.push(new Response(JSON.stringify({ title: "History unavailable" }), { status, headers: { "content-type": "application/json" } }));
+      await assert.rejects(products.getProductPriceHistory(42), error => error.status === status);
+    }
 
     replies.push(json({ items: [], totalCount: 0, page: 2, pageSize: 12 }));
     await products.listProducts({ search: "a&b", page: 2 });
@@ -102,6 +129,9 @@ test("product API contract, publication payload, multipart uploads, binary reads
       assert.equal(requests.at(-1).method, method);
       if (body) assert.deepEqual(JSON.parse(requests.at(-1).body), body);
     }
+    replies.push(new Response(null, { status: 401 }));
+    await assert.rejects(products.getProductPriceHistory(42), error => error.status === 401);
+    assert.equal(storage.getSession(), null);
     storage.saveSession(token({ exp: 1 }), { email: "expired@example.com" });
     assert.equal(storage.getSession(), null);
   } finally {

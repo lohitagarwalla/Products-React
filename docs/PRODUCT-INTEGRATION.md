@@ -58,6 +58,35 @@ Manual integration checklist:
 - Expired sessions return to login. API validation, forbidden, missing-resource, and conflict errors appear without clearing entered details.
 - Search and pagination use the server; cart prices/currencies come from the API.
 
+## Product price history
+
+Existing products have a View price history / Hide price history toggle below the edit form.
+The Admin-only GET `/api/products/{id}/price-history?page=1&pageSize=20` is requested only
+when opened, on pagination/retry, or after successfully saving a numeric price change while
+open. Hiding and reopening reuses the loaded page. A price change saved while hidden marks
+the history stale; reopening fetches page 1. Leaving the editor or changing session clears
+the cache. Toggling preserves unsaved form values, and obsolete requests are cancelled.
+
+The table preserves backend newest-first ordering and exact decimal amounts, displays local
+timestamps with the timezone indicated, shows only the new price, and labels null actors. Baseline
+entries represent prices when tracking started, not older reconstructed changes. Historical
+currency is absent from the API, so amounts have no currency symbol. Actors are shown using
+`changedByUserName` (current first and last name, falling back to the account username).
+Unknown actors show Not recorded; IDs are not displayed. This requires the updated backend
+response. Names are resolved when reading history rather than stored as historical snapshots.
+The isolated fixture server supports the same read workflow.
+
+User-name verification: nine frontend tests, changed-file lint, the production build, and
+nine backend price-history API tests passed, including full-name/username fallback and null
+baseline actors. SQL-backed history tests could not complete because LocalDB failed to start.
+Rebuild and restart the development API to serve the added `changedByUserName` field.
+
+Price-history verification: all nine frontend tests, lint for changed JavaScript/JSX files,
+and the production build passed. Browser fixture checks confirmed unsaved form preservation,
+hide/reopen, immediate refresh after an open-panel price save, and deferred refresh after a
+hidden-panel price save. Authenticated live .NET price-history integration remains unverified.
+Full-project lint currently reports an unrelated unused `back` variable in `OrderDetails.jsx`.
+
 ## Current backend constraints
 
 - Product/image writes return 409 for overlapping database updates, but DTOs do not expose a version for detecting edits from an old browser form. A future API version/ETag contract would be needed to prevent all stale-edit overwrites.
