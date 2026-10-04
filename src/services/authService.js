@@ -11,7 +11,8 @@ function readSession(data, email) {
     throw new Error("The authentication response did not contain a token.");
   }
   if (!readJwt(data.token)) throw new Error("The authentication token is invalid or expired. Please log in again.");
-  return { token: data.token, user: { email: data.email || email } };
+  return { token: data.token, user: { email: data.email || email,
+    firstName: typeof data.firstName === "string" ? data.firstName.trim() : readJwt(data.token).firstName } };
 }
 
 export async function login({ email, password }) {

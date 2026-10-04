@@ -1,4 +1,6 @@
 import { apiRequest } from "./api";
+import { validatePrice } from "./price";
+export { formatMoney as formatPrice } from "./money";
 
 const root = "/api/products";
 export const PRODUCT_CHANGED_EVENT = "shopHub:products-changed";
@@ -21,6 +23,8 @@ export async function getProduct(id, { signal, auth = true } = {}) {
 }
 
 export function productPayload(product) {
+  const validation = validatePrice(product.price);
+  if (validation !== true) throw new Error(validation);
   return {
     title: product.title.trim(), description: product.description?.trim() ?? "",
     brand: product.brand.trim(), price: Number(product.price),
@@ -54,12 +58,4 @@ export function productError(error) {
   if (error.status === 404) return "This product or image is no longer available.";
   if (error.status === 409) return "This product changed during your request. Reload it and retry.";
   return error.message || "The request failed. Please try again.";
-}
-
-export function formatPrice(price, currency = "INR") {
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(price);
-  } catch {
-    return `${currency} ${Number(price).toFixed(2)}`;
-  }
 }

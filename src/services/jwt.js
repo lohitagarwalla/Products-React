@@ -12,7 +12,13 @@ export function readJwt(token, now = Date.now()) {
     if (Number.isFinite(claims.nbf) && claims.nbf * 1000 > now) return null;
     const roles = [claims[ROLE_CLAIM], claims.role, claims.roles].flat()
       .filter(role => typeof role === "string");
-    return { roles: [...new Set(roles)], expiresAt: claims.exp * 1000 };
+    const userId = claims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"]
+      ?? claims.nameid ?? claims.sub;
+    const name = claims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"]
+      ?? claims.name;
+    const firstName = typeof name === "string" ? name.trim().split(/\s+/)[0] : "";
+    return { roles: [...new Set(roles)], expiresAt: claims.exp * 1000,
+      userId: typeof userId === "string" ? userId : null, firstName };
   } catch {
     return null;
   }

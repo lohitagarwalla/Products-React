@@ -4,9 +4,11 @@ import { createServer } from "vite";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { orderFixture } from "./order-fixture.mjs";
 
 const roleClaim = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
 const products = new Map();
+const handleOrders = orderFixture(products);
 const images = new Map();
 let nextProduct = 1;
 let nextImage = 1;
@@ -24,7 +26,7 @@ for (const name of ["product-workflow-front.png", "product-workflow-back.png"]) 
   } catch { /* Image fixtures are optional. */ }
 }
 products.set(draft.id, draft);
-const token = email => `fixture.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600, [roleClaim]: email === "admin@example.test" ? "Admin" : "User" })).toString("base64url")}.test-only`;
+const token = email => `fixture.${Buffer.from(JSON.stringify({ sub: email, exp: Math.floor(Date.now() / 1000) + 3600, [roleClaim]: email === "admin@example.test" ? "Admin" : "User" })).toString("base64url")}.test-only`;
 
 const server = await createServer({
   configFile: false,
@@ -50,8 +52,10 @@ const server = await createServer({
           if (!["admin@example.test", "member@example.test"].includes(credentials.email) || credentials.password !== "Test123") return send(401, { title: "Use a fixture account and Test123" });
           return send(200, { email: credentials.email, token: token(credentials.email) });
         }
-        let isAdmin = false;
+        let isAdmin = false; let userId = null;
         try { isAdmin = JSON.parse(Buffer.from(req.headers.authorization.split(".")[1], "base64url").toString())[roleClaim] === "Admin"; } catch { /* Anonymous request */ }
+        try { userId = JSON.parse(Buffer.from(req.headers.authorization.split(".")[1], "base64url").toString()).sub; } catch { /* Anonymous */ }
+        if (handleOrders({ req, path, url, json, send, userId, isAdmin })) return;
         if ((req.method !== "GET" || path === "/api/products/manage") && !isAdmin) return send(req.headers.authorization ? 403 : 401, { title: "Admin required" });
         if (path === "/api/fixture/fail-next-upload" && req.method === "POST") { failNextUpload = true; return send(204); }
         if (path === "/api/products" || path === "/api/products/manage") {

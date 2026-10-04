@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Signup() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { signUp } = useAuth();
   const {
     register,
@@ -18,7 +19,8 @@ export default function Signup() {
     setError(null);
     const result = await signUp(data);
     if (result.success) {
-      navigate("/");
+      const from = location.state?.from;
+      navigate(typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/", { replace: true });
     } else {
       setError(result.error);
     }
@@ -107,7 +109,7 @@ export default function Signup() {
             </button>
           </form>
           <div className="auth-switch">
-            <p>Already have an account? <Link className="auth-link" to="/login">Login</Link></p>
+            <p>Already have an account? <Link className="auth-link" to="/login" state={location.state}>Login</Link></p>
           </div>
         </div>
       </div>

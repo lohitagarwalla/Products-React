@@ -9,7 +9,9 @@ export function getSession() {
     const claims = readJwt(session?.token);
     return claims && typeof session?.user?.email === "string"
       ? { token: session.token, expiresAt: claims.expiresAt,
-        user: { email: session.user.email, roles: claims.roles } } : null;
+        user: { id: claims.userId, email: session.user.email,
+          firstName: typeof session.user.firstName === "string" && session.user.firstName.trim()
+            ? session.user.firstName.trim() : claims.firstName, roles: claims.roles } } : null;
   } catch {
     return null;
   }

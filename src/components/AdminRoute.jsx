@@ -6,7 +6,7 @@ export default function AdminRoute() {
   const location = useLocation();
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
   if (!isAdmin) return <main className="page"><div className="container">
-    <h1>Access denied</h1><p>You need the Admin role to manage products.</p><Link to="/">Back to shop</Link>
+    <h1>Access denied</h1><p>You need the Admin role to access this page.</p><Link to="/">Back to shop</Link>
   </div></main>;
   return <Outlet key={sessionKey} />;
 }

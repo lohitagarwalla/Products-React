@@ -1,4 +1,5 @@
 import { clearSession, getSession } from "./authStorage";
+import { parseMoneyJson } from "./money";
 
 export class ApiError extends Error {
   constructor(status, data) {
@@ -47,7 +48,7 @@ export async function apiRequest(path, { auth = true, json, responseType = "json
   let data = text || null;
   if (text && response.headers.get("content-type")?.includes("json")) {
     try {
-      data = JSON.parse(text);
+      data = parseMoneyJson(text);
     } catch {
       if (response.ok) throw new Error("The API returned invalid JSON.");
       // Preserve the status for malformed HTTP error responses.

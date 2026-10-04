@@ -12,6 +12,9 @@ import CartProvider from "./context/CartContext";
 import AdminRoute from "./components/AdminRoute";
 import ProductList from "./pages/admin/ProductList";
 import ProductEditor from "./pages/admin/ProductEditor";
+import AuthenticatedRoute from "./components/AuthenticatedRoute";
+import Orders from "./pages/Orders";
+import OrderDetails from "./pages/OrderDetails";
 
 function App() {
   return (
@@ -26,7 +29,13 @@ function App() {
             <Route path="/auth" element={<Navigate to="/signup" replace />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/products/:id" element={<ProductDetails />} />
+            <Route element={<AuthenticatedRoute />}>
+              <Route path="/orders" element={<Orders />} />
+              <Route path="/orders/:id" element={<OrderDetails />} />
+            </Route>
             <Route element={<AdminRoute />}>
+              <Route path="/admin/orders" element={<Orders manage />} />
+              <Route path="/admin/orders/:id" element={<OrderDetails manage />} />
               <Route path="/admin/products" element={<ProductList />} />
               <Route path="/admin/products/new" element={<ProductEditor />} />
               <Route path="/admin/products/:id/edit" element={<ProductEditor />} />

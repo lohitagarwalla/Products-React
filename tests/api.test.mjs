@@ -20,7 +20,7 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
   };
   const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   const values = new Map();
-  globalThis.window = new EventTarget();
+  globalThis.window = new EventTarget(); globalThis.window.location = { origin: "http://localhost:5173" };
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
     getItem: key => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),
@@ -56,13 +56,18 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
     ]) {
       nextResponse = json({ token: newToken }, 201);
       assert.deepEqual(await method(registration), {
-        token: newToken, user: { email: "test@example.com" },
+        token: newToken, user: { email: "test@example.com", firstName: "" },
       });
       assert.equal(request.headers.has("Authorization"), false);
       assert.equal(request.method, "POST");
       assert.equal(new URL(request.url).pathname, path);
       assert.deepEqual(JSON.parse(request.body), payload);
     }
+    nextResponse = json({ token: newToken, firstName: "  Mary Jane  " });
+    const namedSession = await auth.login(credentials);
+    storage.saveSession(namedSession.token, namedSession.user);
+    assert.equal(storage.getSession().user.firstName, "Mary Jane");
+    storage.saveSession(testToken, { email: "test@example.com" });
     nextResponse = json({});
     await assert.rejects(auth.login(credentials), /did not contain a token/);
 

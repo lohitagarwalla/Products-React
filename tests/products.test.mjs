@@ -28,7 +28,7 @@ test("product API contract, publication payload, multipart uploads, binary reads
   const originalWindow = globalThis.window;
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   const values = new Map();
-  globalThis.window = new EventTarget();
+  globalThis.window = new EventTarget(); globalThis.window.location = { origin: "http://localhost:5173" };
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
     getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key),
   } });
