@@ -9,6 +9,8 @@ import { multiplyMoney } from "../services/money";
 import { createOrder, orderError } from "../services/orderService";
 import { checkoutValidation, clearCheckout, newRequestId, readCheckout, saveCheckout } from "../services/checkoutStorage";
 import usePendingCheckout from "../hooks/usePendingCheckout";
+import useCheckoutAddress from "../hooks/useCheckoutAddress";
+import CheckoutAddress from "../components/CheckoutAddress";
 
 export default function Checkout() {
   const { sessionKey } = useAuth();
@@ -19,6 +21,7 @@ function CheckoutContent() {
   const { cartItems, updateQuantity, removeFromCart, totals, refreshCart, refreshing,
     cartError, cartInstance, cartRevision, completeCheckout, locked } = useCart();
   const { user, isAuthenticated, sessionKey } = useAuth();
+  const addressState = useCheckoutAddress(isAuthenticated ? user?.id : null);
   const { pending, error: storageError } = usePendingCheckout(user?.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -45,6 +48,8 @@ function CheckoutContent() {
       attempt = readCheckout(user.id);
       if (!attempt) {
         if (validation || refreshing || cartError) throw new Error(validation || cartError || "Please wait for the cart to refresh.");
+        // When the API supports addresses, capture addressState.selectedId here
+        // in the new attempt so recovery retries keep the original selection.
         attempt = { requestId: newRequestId(), cartInstance, cartRevision,
           items: cartItems.map(item => ({ productId: item.id, quantity: item.quantity })),
         };
@@ -97,7 +102,9 @@ function CheckoutContent() {
     {refreshing && <p role="status">Checking current prices and availability…</p>}
     {cartError && <div className="error-message" role="alert">{cartError} <button className="btn btn-secondary" disabled={busy || locked} onClick={refreshCart}>Retry</button></div>}
     {!cartItems.length ? <p className="empty-state">Your cart is empty. <Link to="/">Browse products</Link></p> :
-      <div className="checkout-container"><section className="checkout-items"><h2>Order summary</h2>
+      <div className="checkout-container"><div className="checkout-main">
+      <CheckoutAddress isAuthenticated={isAuthenticated} userId={user?.id} addressState={addressState} disabled={busy || locked} />
+      <section className="checkout-items"><h2>Order summary</h2>
         {cartItems.map(item => <div className="checkout-item" key={item.id}>
           <ProductImage image={item.available ? item.product.images[0] : null} title={item.product.title} className="checkout-item-image" />
           <div className="checkout-item-details"><h3>{item.product.title}</h3><p>{formatPrice(item.product.price, item.product.currency)} each</p>
@@ -110,7 +117,7 @@ function CheckoutContent() {
             <button className="btn btn-secondary btn-small" disabled={locked || busy} onClick={() => removeFromCart(item.id)}>Remove</button>
           </div>
         </div>)}
-      </section><section className="checkout-summary"><h2>Estimated total</h2>
+      </section></div><section className="checkout-summary"><h2>Estimated total</h2>
         {Object.entries(totals).map(([currency, total]) => <div className="checkout-total" key={currency}><span>{currency}</span><strong>{formatPrice(total, currency)}</strong></div>)}
         {validation && <p className="form-error">{validation}</p>}
         {!isAuthenticated ? <Link className="btn btn-primary btn-block" to="/login" state={{ from: "/checkout" }}>Log in to place order</Link> :

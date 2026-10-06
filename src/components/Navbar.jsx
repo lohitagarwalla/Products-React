@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { useAuth } from "../context/AuthContext";
 import ProductSearch from "./ProductSearch";
 import AdminMenu from "./AdminMenu";
+import AccountMenu from "./AccountMenu";
 
 export default function Navbar() {
   const { user, logout, isAdmin } = useAuth();
@@ -27,7 +28,6 @@ export default function Navbar() {
           <Link to="/checkout" className="navbar-link">
             Cart
           </Link>
-          {user && <Link to="/orders" className="navbar-link">Orders</Link>}
         </div>
         <div className="navbar-search">
           <ProductSearch key={pathname} search={search} onSearch={searchProducts} />
@@ -44,13 +44,12 @@ export default function Navbar() {
             </div>
           ) : (
             <div className="navbar-user">
-              <div className="navbar-account">
-                <span className="navbar-greeting">{user.firstName ? `Hello, ${user.firstName}` : "Hello"}</span>
-                {isAdmin && <AdminMenu key={locationKey} />}
-              </div>
-              <button className="btn btn-secondary" onClick={logout}>
-                Logout
-              </button>
+              <AccountMenu
+                key={`account-${locationKey}`}
+                user={user}
+                logout={logout}
+              />
+              {isAdmin && <AdminMenu key={`admin-${locationKey}`} />}
             </div>
           )}
         </div>

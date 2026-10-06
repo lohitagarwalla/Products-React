@@ -1,4 +1,5 @@
 import { apiRequest } from "./api";
+import { buildOrderRequest } from "./checkoutAddress";
 
 export const ORDER_STATUSES = ["Placed", "Shipped", "Delivered", "Cancelled"];
 export const ORDER_CHANGED_EVENT = "shopHub:orders-changed";
@@ -22,7 +23,7 @@ async function write(path, json) {
   return data;
 }
 
-export const createOrder = ({ requestId, items }) => write(root, { requestId, items });
+export const createOrder = attempt => write(root, buildOrderRequest(attempt));
 export function changeOrderStatus(id, action, rowVersion, reason = "") {
   if (!["cancel", "ship", "deliver"].includes(action)) throw new Error("Invalid order action.");
   return write(`${root}/${encodeURIComponent(id)}/${action}`, {

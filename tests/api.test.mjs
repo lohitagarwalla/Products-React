@@ -46,6 +46,42 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
     assert.deepEqual(await apiRequest("/api/products"), { status: 200, data: [{ id: 1 }] });
     assert.equal(request.headers.get("Authorization"), `Bearer ${testToken}`);
 
+    const addresses = await server.ssrLoadModule("/src/services/addressService.js");
+    const savedAddress = { id: 7, isDefault: false, rowVersion: "AAAAAAAAB+E=" };
+    nextResponse = json([savedAddress]);
+    assert.deepEqual(await addresses.listAddresses(), [savedAddress]);
+    assert.equal(new URL(request.url).pathname, "/api/profile/addresses");
+    assert.equal(request.cache, "no-store");
+    assert.equal(request.headers.get("Authorization"), `Bearer ${testToken}`);
+    nextResponse = json({ ...savedAddress, isDefault: true });
+    assert.equal((await addresses.makeDefaultAddress(savedAddress.id, savedAddress.rowVersion)).isDefault, true);
+    assert.equal(new URL(request.url).pathname, "/api/profile/addresses/7/default");
+    assert.equal(request.method, "PUT");
+    assert.deepEqual(JSON.parse(request.body), { rowVersion: savedAddress.rowVersion });
+    nextResponse = json({ title: "Concurrent update" }, 409);
+    await assert.rejects(addresses.makeDefaultAddress(7, savedAddress.rowVersion), error => error.status === 409);
+
+    const addressValues = { label: "Home", recipientName: "Test User", addressLine1: "12 Main Road",
+      addressLine2: null, city: "Bengaluru", state: "Karnataka", postalCode: "560001", countryCode: "IN" };
+    nextResponse = json({ ...savedAddress, ...addressValues }, 201);
+    await addresses.createAddress({ ...addressValues, makeDefault: true });
+    assert.equal(request.method, "POST");
+    assert.equal(new URL(request.url).pathname, "/api/profile/addresses");
+    assert.deepEqual(JSON.parse(request.body), { ...addressValues, makeDefault: true });
+    nextResponse = json({ ...savedAddress, ...addressValues });
+    await addresses.getAddress(7);
+    assert.equal(new URL(request.url).pathname, "/api/profile/addresses/7");
+    assert.equal(request.body, undefined);
+    nextResponse = json({ ...savedAddress, ...addressValues });
+    await addresses.updateAddress(7, addressValues, savedAddress.rowVersion);
+    assert.equal(request.method, "PUT");
+    assert.deepEqual(JSON.parse(request.body), { ...addressValues, rowVersion: savedAddress.rowVersion });
+    nextResponse = new Response(null, { status: 204 });
+    await addresses.deleteAddress(7, savedAddress.rowVersion);
+    assert.equal(request.method, "DELETE");
+    assert.deepEqual(JSON.parse(request.body), { rowVersion: savedAddress.rowVersion });
+    assert.equal(request.headers.get("Authorization"), `Bearer ${testToken}`);
+
     const credentials = { email: "test@example.com", password: "password" };
     const registration = {
       firstname: "Test", lastname: "User", ...credentials, confirmPassword: "password",

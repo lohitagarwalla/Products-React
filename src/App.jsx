@@ -15,6 +15,7 @@ import ProductEditor from "./pages/admin/ProductEditor";
 import AuthenticatedRoute from "./components/AuthenticatedRoute";
 import Orders from "./pages/Orders";
 import OrderDetails from "./pages/OrderDetails";
+import Profile from "./pages/Profile";
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/products/:id" element={<ProductDetails />} />
             <Route element={<AuthenticatedRoute />}>
+              <Route path="/profile" element={<Profile />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/orders/:id" element={<OrderDetails />} />
             </Route>
