@@ -85,13 +85,14 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
     const credentials = { email: "test@example.com", password: "password" };
     const registration = {
       firstname: "Test", lastname: "User", ...credentials, confirmPassword: "password",
+      phoneNumber: "+919876543210",
     };
     for (const [method, path, payload] of [
       [auth.login, "/api/auth/login", credentials],
       [auth.signUp, "/api/auth/register", registration],
     ]) {
       nextResponse = json({ token: newToken }, 201);
-      assert.deepEqual(await method(registration), {
+      assert.deepEqual(await method({ ...registration, phoneNumber: `  ${registration.phoneNumber}  ` }), {
         token: newToken, user: { email: "test@example.com", firstName: "" },
       });
       assert.equal(request.headers.has("Authorization"), false);

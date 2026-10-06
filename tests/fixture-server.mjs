@@ -5,10 +5,12 @@ import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { orderFixture } from "./order-fixture.mjs";
+import { cartFixture } from "./cart-fixture.mjs";
 
 const roleClaim = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
 const products = new Map();
-const handleOrders = orderFixture(products);
+const savedCarts = cartFixture(products);
+const handleOrders = orderFixture(products, savedCarts.purchased);
 const images = new Map();
 let nextProduct = 1;
 let nextImage = 1;
@@ -65,6 +67,7 @@ const server = await createServer({
         let isAdmin = false; let userId = null;
         try { isAdmin = JSON.parse(Buffer.from(req.headers.authorization.split(".")[1], "base64url").toString())[roleClaim] === "Admin"; } catch { /* Anonymous request */ }
         try { userId = JSON.parse(Buffer.from(req.headers.authorization.split(".")[1], "base64url").toString()).sub; } catch { /* Anonymous */ }
+        if (savedCarts.handle({ req, path, json, send, userId })) return;
         if (handleOrders({ req, path, url, json, send, userId, isAdmin })) return;
         const historyMatch = path.match(/^\/api\/products\/(\d+)\/price-history$/);
         if (historyMatch && req.method === "GET") {

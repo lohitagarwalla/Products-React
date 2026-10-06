@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useCart } from "../context/CartContext";
+import CartAction from "../components/CartAction";
 import { useAuth } from "../context/AuthContext";
 import useProduct from "../hooks/useProduct";
 import ProductImage from "../components/ProductImage";
@@ -19,8 +19,6 @@ export default function ProductDetails() {
 function Details({ product }) {
   const [selected, setSelected] = useState(product.images[0]?.id);
   const { isAdmin } = useAuth();
-  const { addToCart, cartItems, locked } = useCart();
-  const quantity = cartItems.find(item => item.id === product.id)?.quantity;
   const image = product.images.find(item => item.id === selected) || product.images[0];
   return <div className="product-detail">
     <div className="product-detail-image">
@@ -35,7 +33,7 @@ function Details({ product }) {
       <p className="product-detail-price">{formatPrice(product.price, product.currency)}</p>
       <p className="product-detail-description">{product.description}</p>
       <div className="toolbar">
-        {product.isPublished && <button className="btn btn-primary" disabled={locked || quantity >= 1000 || (!quantity && cartItems.length >= 100)} onClick={() => addToCart(product)}>Add to Cart {quantity ? `(${quantity})` : ""}</button>}
+        {product.isPublished && <CartAction product={product} />}
         {isAdmin && <Link className="btn btn-secondary" to={`/admin/products/${product.id}/edit`}>Edit product</Link>}
       </div>
     </div>

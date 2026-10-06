@@ -1,29 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildOrderRequest, reconcileAddressSelection } from "../src/services/checkoutAddress.js";
+import { buildOrderRequest, deliveryAddressSnapshot } from "../src/services/checkoutAddress.js";
 
-const addresses = [{ id: 1, isDefault: false }, { id: 2, isDefault: true }];
+const address = { id: 2, recipientName: "Alice", addressLine1: "1 Main St", city: "Bengaluru",
+  state: "Karnataka", postalCode: "560001", countryCode: "IN", rowVersion: "version", isDefault: true };
 
-test("initial checkout selects only an explicit default", () => {
-  assert.equal(reconcileAddressSelection(addresses, null, false), 2);
-  assert.equal(reconcileAddressSelection([{ id: 1, isDefault: false }], null, false), null);
-  assert.equal(reconcileAddressSelection([], null, false), null);
+test("checkout snapshots delivery fields and strips profile metadata", () => {
+  const snapshot = deliveryAddressSnapshot(address);
+  assert.deepEqual(snapshot, { recipientName: "Alice", addressLine1: "1 Main St", addressLine2: null,
+    city: "Bengaluru", state: "Karnataka", postalCode: "560001", countryCode: "IN" });
+  const edited = { ...address, addressLine1: "New street" };
+  assert.notEqual(snapshot.addressLine1, edited.addressLine1);
+  assert.throws(() => deliveryAddressSnapshot(null), /Select a delivery address/);
 });
 
-test("refresh preserves a checkout choice even when the profile default changes", () => {
-  assert.equal(reconcileAddressSelection(addresses, 1, true), 1);
-  assert.equal(reconcileAddressSelection([{ id: 1, isDefault: true }, { id: 2, isDefault: false }], 2, true), 2);
+test("order retries retain the original delivery snapshot and exclude local metadata", () => {
+  const attempt = { requestId: "request", items: [{ productId: 7, quantity: 2, price: 123 }],
+    deliveryAddress: deliveryAddressSnapshot(address), selectedAddressId: 2, cartInstance: "cart" };
+  const first = buildOrderRequest(attempt);
+  address.addressLine1 = "Changed after submitting";
+  assert.deepEqual(buildOrderRequest(attempt), first);
+  assert.equal(first.deliveryAddress.addressLine1, "1 Main St");
+  assert.deepEqual(first.items, [{ productId: 7, quantity: 2 }]);
+  assert.deepEqual(Object.keys(first), ["requestId", "items", "deliveryAddress"]);
 });
 
-test("deleted selections require an explicit replacement instead of silently choosing another address", () => {
-  assert.equal(reconcileAddressSelection(addresses, 3, true), null);
-  assert.equal(reconcileAddressSelection(addresses, null, true), null);
-  assert.equal(reconcileAddressSelection([], 1, true), null);
-});
-
-test("current order requests exclude address data and checkout recovery metadata", () => {
-  const attempt = { requestId: "request", items: [{ productId: 7, quantity: 2 }],
-    cartInstance: "cart", cartRevision: 3, selectedAddressId: 2, address: { recipientName: "Private" } };
-  assert.deepEqual(buildOrderRequest(attempt), { requestId: "request", items: [{ productId: 7, quantity: 2 }] });
-  assert.equal(attempt.selectedAddressId, 2);
+test("legacy pending checkouts cannot silently gain a different delivery address", () => {
+  assert.throws(() => buildOrderRequest({ requestId: "old", items: [{ productId: 7, quantity: 2 }] }), /older checkout/);
 });

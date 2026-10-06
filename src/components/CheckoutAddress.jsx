@@ -30,7 +30,7 @@ function AddressSelector({ addresses, selectedId, loading, error, disabled, trig
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <h2 id={titleId}>Select delivery address</h2>
     {loading && <p role="status">Loading addresses…</p>}
-    {error && <div role="alert"><p className="error-message">{error}</p><button type="button" className="btn btn-secondary" disabled={loading || disabled} onClick={onRetry}>Retry</button></div>}
+    {error && <div role="alert"><p className="error-message">{error}</p><button type="button" className="btn btn-secondary" disabled={loading} onClick={onRetry}>Retry</button></div>}
     {!loading && !error && <fieldset className="checkout-address-options">
       <legend>Saved addresses</legend>
       {!addresses.length && <p>No saved addresses yet.</p>}
@@ -44,7 +44,7 @@ function AddressSelector({ addresses, selectedId, loading, error, disabled, trig
     </fieldset>}
     <div className="toolbar checkout-address-dialog-actions">
       <button type="button" className="btn btn-primary" disabled={disabled || loading || !!error || !validDraft}
-        onClick={() => { onSelect(draftId); onClose(); }}>Use this address</button>
+        onClick={async () => { if (await onSelect(draftId)) onClose(); }}>Use this address</button>
       <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
       <Link to="/profile">Manage addresses</Link>
     </div>
@@ -80,7 +80,7 @@ export default function CheckoutAddress({ isAuthenticated, userId, addressState,
           </> : addresses.length ? <p>Select a delivery address from your saved addresses.</p>
             : <p>No saved addresses yet. <Link to="/profile">Add an address</Link></p>}
         </>}
-        <p className="muted checkout-address-notice">Address selection is a preview. Delivery addresses are not yet saved with orders.</p>
+        <p className="muted checkout-address-notice">Your selection is saved with your cart. Delivery details are saved with your order when you place it.</p>
       </>}
     {selecting && <AddressSelector addresses={addresses} selectedId={selectedId} loading={loading} error={error}
       disabled={disabled} triggerRef={trigger} onRetry={refresh} onSelect={selectAddress} onClose={() => setSelecting(false)} />}

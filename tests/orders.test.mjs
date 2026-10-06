@@ -30,7 +30,7 @@ test("checkout recovery retains the exact request and isolates accounts", () => 
     getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key),
   } });
   try {
-    const pending = { requestId: newRequestId(), cartInstance: "cart", items: [{ productId: 42, quantity: 2 }] };
+    const pending = { requestId: newRequestId(), deliveryAddress: { recipientName: "Alice", addressLine1: "1 Main St", city: "Bengaluru", state: "Karnataka", postalCode: "560001", countryCode: "IN", addressLine2: null }, items: [{ productId: 42, quantity: 2 }] };
     assert.match(pending.requestId, /^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/);
     saveCheckout("alice", pending);
     assert.deepEqual(readCheckout("alice"), pending);
@@ -90,7 +90,7 @@ test("order contracts, retry semantics, authorization headers, filters and concu
       return reply;
     };
     const json = (body, status = 200) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-    const attempt = { requestId: newRequestId(), items: [{ productId: 42, quantity: 2 }], userId: "forged", totalAmount: 1, cartInstance: "local" };
+    const attempt = { requestId: newRequestId(), deliveryAddress: { recipientName: "Alice", addressLine1: "1 Main St", city: "Bengaluru", state: "Karnataka", postalCode: "560001", countryCode: "IN", addressLine2: null }, items: [{ productId: 42, quantity: 2 }], userId: "forged", totalAmount: 1, cartInstance: "local" };
     reply = new TypeError("Lost response");
     await assert.rejects(orders.createOrder(attempt));
     const firstBody = requests.at(-1).body;
@@ -99,7 +99,7 @@ test("order contracts, retry semantics, authorization headers, filters and concu
       const order = await orders.createOrder(attempt);
       assert.equal(order.totalAmount, "9999999999999999.99");
       assert.equal(requests.at(-1).body, firstBody);
-      assert.deepEqual(JSON.parse(firstBody), { requestId: attempt.requestId, items: attempt.items });
+      assert.deepEqual(JSON.parse(firstBody), { requestId: attempt.requestId, items: attempt.items, deliveryAddress: attempt.deliveryAddress });
       assert.equal(requests.at(-1).headers.get("Authorization"), `Bearer ${token}`);
     }
     reply = json({ items: [], page: 1, pageSize: 20, totalCount: 0 });

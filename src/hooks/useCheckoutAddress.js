@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { addressError, listAddresses } from "../services/addressService";
-import { reconcileAddressSelection } from "../services/checkoutAddress";
+import { useCart } from "../context/CartContext";
 
-// CheckoutContent is keyed by sessionKey: account changes discard all address state.
 export default function useCheckoutAddress(userId) {
-  const [state, setState] = useState({ addresses: [], selectedId: null, initialized: false, loading: !!userId, error: "", message: "" });
+  const { selectedAddressId, selectedAddress, selectCartAddress, refreshCart, cartError } = useCart();
+  const [state, setState] = useState({ addresses: [], loading: !!userId, error: "" });
   const request = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -14,19 +14,14 @@ export default function useCheckoutAddress(userId) {
     request.current = controller;
     setState(previous => ({ ...previous, loading: true, error: "" }));
     try {
-      const addresses = await listAddresses({ signal: controller.signal });
-      if (controller.signal.aborted) return;
-      setState(previous => {
-        const selectedId = reconcileAddressSelection(addresses, previous.selectedId, previous.initialized);
-        return { addresses, selectedId, initialized: true, loading: false, error: "",
-          message: previous.selectedId !== null && selectedId === null ? "Your selected address is no longer available. Please select another address." : "" };
-      });
+      const [addresses] = await Promise.all([listAddresses({ signal: controller.signal }), refreshCart()]);
+      if (!controller.signal.aborted) setState({ addresses, loading: false, error: "" });
     } catch (failure) {
       if (!controller.signal.aborted) setState(previous => ({ ...previous, loading: false, error: addressError(failure) }));
     } finally {
       if (request.current === controller) request.current = null;
     }
-  }, [userId]);
+  }, [userId, refreshCart]);
 
   useEffect(() => {
     refresh();
@@ -40,10 +35,12 @@ export default function useCheckoutAddress(userId) {
     };
   }, [refresh]);
 
-  function selectAddress(id) {
-    setState(previous => previous.addresses.some(address => address.id === id)
-      ? { ...previous, selectedId: id, message: "" } : previous);
+  async function selectAddress(id) {
+    if (!state.addresses.some(address => address.id === id)) return false;
+    return selectCartAddress(id);
   }
 
-  return { ...state, selectedAddress: state.addresses.find(address => address.id === state.selectedId) ?? null, refresh, selectAddress };
+  return { ...state, error: state.error || cartError, selectedId: selectedAddressId,
+    selectedAddress: state.addresses.some(address => address.id === selectedAddressId) ? selectedAddress : null,
+    message: "", refresh, selectAddress };
 }

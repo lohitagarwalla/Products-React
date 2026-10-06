@@ -1,90 +1,109 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
-import { getProduct, productError } from "../services/productService";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import * as carts from "../services/cartService";
+import { getSession } from "../services/authStorage";
 import { fromMinor, toMinor } from "../services/money";
-import { newRequestId, readCheckout } from "../services/checkoutStorage";
+import { readCheckout } from "../services/checkoutStorage";
 import { useAuth } from "./AuthContext";
 import usePendingCheckout from "../hooks/usePendingCheckout";
 
 const CartContext = createContext(null);
 
 export default function CartProvider({ children }) {
+  const { sessionKey } = useAuth();
+  return <SavedCart key={sessionKey} sessionKey={sessionKey}>{children}</SavedCart>;
+}
+
+function SavedCart({ children, sessionKey }) {
   const { user } = useAuth();
   const recovery = usePendingCheckout(user?.id);
-  const locked = !!recovery.pending || !!recovery.error;
-  const [cartInstance] = useState(newRequestId);
-  const [cartRevision, setCartRevision] = useState(0);
-  const revisionRef = useRef(0);
-  const [cartItems, setCartItems] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const [cart, setCart] = useState(null);
+  const [refreshing, setRefreshing] = useState(!!user?.id);
+  const [saving, setSaving] = useState(false);
   const [cartError, setCartError] = useState("");
-  const requestNumber = useRef(0);
-  const cartIds = JSON.stringify(cartItems.map(item => item.id));
-
-  function addToCart(product) {
-    if (!product.isPublished || isLocked()) return;
-    touchCart();
-    setCartItems(items => items.some(item => item.id === product.id)
-      ? items.map(item => item.id === product.id ? { ...item, quantity: Math.min(1000, item.quantity + 1), product, available: true } : item)
-      : items.length >= 100 ? items : [...items, { id: product.id, quantity: 1, product, available: true }]);
-  }
-
-  function isLocked() {
-    try { return !!readCheckout(user?.id); } catch { return true; }
-  }
-
-  function touchCart() {
-    revisionRef.current += 1;
-    setCartRevision(revisionRef.current);
-  }
+  const inFlight = useRef(false);
+  const readRequest = useRef(null);
+  const active = useRef(true);
+  const currentSession = () => active.current && getSession()?.token === sessionKey;
 
   const refreshCart = useCallback(async () => {
-    const current = ++requestNumber.current;
-    setRefreshing(true); setCartError("");
+    if (!user?.id || inFlight.current) return false;
+    readRequest.current?.abort();
+    const controller = new AbortController();
+    readRequest.current = controller;
+    setRefreshing(true);
+    setCartError("");
     try {
-      const products = await Promise.all(JSON.parse(cartIds).map(async id => {
-        try { return { id, product: await getProduct(id, { auth: false }) }; }
-        catch (error) { if (error.status === 404) return { id, product: null }; throw error; }
-      }));
-      if (current !== requestNumber.current) return false;
-      setCartItems(items => items.map(item => {
-        const fresh = products.find(product => product.id === item.id);
-        return fresh ? { ...item, product: fresh.product || item.product, available: !!fresh.product?.isPublished } : item;
-      }));
-      return products.every(item => item.product?.isPublished);
-    } catch (error) {
-      if (current === requestNumber.current) setCartError(productError(error));
+      const result = await carts.getCart({ signal: controller.signal });
+      if (controller.signal.aborted || !active.current || getSession()?.token !== sessionKey) return false;
+      setCart(result);
+      return true;
+    } catch (failure) {
+      if (!controller.signal.aborted && active.current && getSession()?.token === sessionKey) setCartError(carts.cartError(failure));
       return false;
     } finally {
-      if (current === requestNumber.current) setRefreshing(false);
+      if (readRequest.current === controller) {
+        readRequest.current = null;
+        if (active.current) setRefreshing(false);
+      }
     }
-  }, [cartIds]);
+  }, [user?.id, sessionKey]);
 
-  function removeFromCart(id) {
-    if (isLocked()) return;
-    touchCart();
-    setCartItems(items => items.filter(item => item.id !== id));
+  useEffect(() => {
+    active.current = true;
+    refreshCart();
+    const onFocus = () => { if (document.visibilityState === "visible") refreshCart(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      active.current = false;
+      readRequest.current?.abort();
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [refreshCart]);
+
+  async function mutate(action) {
+    if (!user?.id || !cart || inFlight.current || readRequest.current || cartError || !currentSession()) return false;
+    try { if (readCheckout(user.id)) return false; } catch { return false; }
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      const result = await action();
+      if (!currentSession()) return false;
+      setCart(result);
+      setCartError("");
+      return true;
+    } catch (failure) {
+      if (currentSession()) setCartError(`${carts.cartError(failure)} Reload the cart before making further changes.`);
+      return false;
+    } finally {
+      inFlight.current = false;
+      if (currentSession()) setSaving(false);
+    }
   }
+
+  const cartItems = cart?.items ?? [];
+  function addToCart(product) {
+    if (!product.isPublished) return Promise.resolve(false);
+    const item = cartItems.find(item => item.id === product.id);
+    if (item?.quantity >= 1000 || (!item && cartItems.length >= 100)) return Promise.resolve(false);
+    return mutate(() => carts.setCartItem(product.id, (item?.quantity ?? 0) + 1));
+  }
+  const removeFromCart = id => mutate(() => carts.removeCartItem(id));
   function updateQuantity(id, quantity) {
-    if (isLocked() || !Number.isInteger(quantity) || quantity > 1000) return;
-    if (quantity <= 0) return removeFromCart(id);
-    touchCart();
-    setCartItems(items => items.map(item => item.id === id ? { ...item, quantity } : item));
-  }
-  function completeCheckout(pending) {
-    // Check the current revision, including when an older request finishes after navigation.
-    if (pending.cartInstance !== cartInstance || pending.cartRevision !== revisionRef.current) return;
-    touchCart();
-    setCartItems(items => items.map(item => ({ ...item,
-      quantity: item.quantity - (pending.items.find(ordered => ordered.productId === item.id)?.quantity || 0),
-    })).filter(item => item.quantity > 0));
+    if (!Number.isInteger(quantity) || quantity > 1000) return Promise.resolve(false);
+    return quantity <= 0 ? removeFromCart(id) : mutate(() => carts.setCartItem(id, quantity));
   }
   const totals = cartItems.filter(item => item.available).reduce((result, item) => {
-    result[item.product.currency] = fromMinor(toMinor(result[item.product.currency] || "0") + toMinor(item.product.price) * BigInt(item.quantity));
+    const currency = item.product.currency;
+    result[currency] = fromMinor(toMinor(result[currency] || "0") + toMinor(item.product.price) * BigInt(item.quantity));
     return result;
   }, {});
-
+  const locked = !!recovery.pending || !!recovery.error || saving || refreshing || !!cartError || (!!user && !cart);
   return <CartContext.Provider value={{ cartItems, addToCart, removeFromCart, updateQuantity,
-    totals, refreshCart, refreshing, cartError, locked, cartInstance, cartRevision, completeCheckout }}>{children}</CartContext.Provider>;
+    clearCart: () => mutate(carts.clearCart), selectCartAddress: id => mutate(() => carts.setCartAddress(id)),
+    selectedAddressId: cart?.selectedAddressId ?? null, selectedAddress: cart?.selectedAddress ?? null,
+    totals, refreshCart, refreshing, saving, cartError, locked }}>{children}</CartContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

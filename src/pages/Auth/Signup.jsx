@@ -73,6 +73,26 @@ export default function Signup() {
               {errors.email && <span className="form-error">{errors.email.message}</span>}
             </div>
             <div className="form-group">
+              <label className="form-label" htmlFor="phoneNumber">Phone number</label>
+              <input
+                className="form-input"
+                id="phoneNumber"
+                type="tel"
+                autoComplete="tel"
+                aria-required="true"
+                aria-invalid={!!errors.phoneNumber}
+                aria-describedby={errors.phoneNumber ? "signup-phone-hint signup-phone-error" : "signup-phone-hint"}
+                {...register("phoneNumber", {
+                  required: "Phone number is required",
+                  setValueAs: value => value.trim(),
+                  validate: value => /^(?:\+91)?[6-9][0-9]{9}$/.test(value)
+                    || "Enter a valid Indian mobile number: 10 digits starting with 6, 7, 8, or 9, optionally prefixed with +91.",
+                })}
+              />
+              <p id="signup-phone-hint" className="muted">Enter an Indian mobile number, such as 9876543210 or +919876543210.</p>
+              {errors.phoneNumber && <span id="signup-phone-error" className="form-error" role="alert">{errors.phoneNumber.message}</span>}
+            </div>
+            <div className="form-group">
               <label className="form-label" htmlFor="password">Password</label>
               <input
                 className="form-input"

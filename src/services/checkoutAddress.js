@@ -1,11 +1,11 @@
-// Preserve an explicit choice when refreshing; never silently substitute a deleted address.
-export function reconcileAddressSelection(addresses, selectedId, initialized) {
-  if (!initialized) return addresses.find(address => address.isDefault)?.id ?? null;
-  return addresses.some(address => address.id === selectedId) ? selectedId : null;
+export function deliveryAddressSnapshot(address) {
+  if (!address) throw new Error("Select a delivery address before placing your order.");
+  return Object.fromEntries(["recipientName", "addressLine1", "addressLine2", "city", "state", "postalCode", "countryCode"]
+    .map(field => [field, address[field] ?? (field === "addressLine2" ? null : "")]));
 }
 
-// This is the single boundary to extend with addressId once the order API supports it.
-// Checkout-only state must not leak into the current API contract.
-export function buildOrderRequest({ requestId, items }) {
-  return { requestId, items };
+export function buildOrderRequest({ requestId, items, deliveryAddress }) {
+  if (!deliveryAddress) throw new Error("This older checkout has no saved delivery address. Review My orders before starting a new checkout.");
+  return { requestId, items: items.map(({ productId, quantity }) => ({ productId, quantity })),
+    deliveryAddress: deliveryAddressSnapshot(deliveryAddress) };
 }

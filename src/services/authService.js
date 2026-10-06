@@ -22,10 +22,10 @@ export async function login({ email, password }) {
   return readSession(data, email);
 }
 
-export async function signUp({ firstname, lastname, email, password, confirmPassword }) {
+export async function signUp({ firstname, lastname, email, phoneNumber, password, confirmPassword }) {
   const { data } = await apiRequest(endpoints.signUp, {
     method: "POST", auth: false,
-    json: { firstname, lastname, email, password, confirmPassword },
+    json: { firstname, lastname, email, phoneNumber: phoneNumber.trim(), password, confirmPassword },
   });
   return readSession(data, email);
 }
