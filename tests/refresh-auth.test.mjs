@@ -1,0 +1,284 @@
+import assert from "node:assert/strict";
+import { test, before } from "node:test";
+import vm from "node:vm";
+import { build } from "vite";
+
+let bundle;
+before(async () => {
+  const result = await build({ configFile: false, logLevel: "silent",
+    define: { "import.meta.env.VITE_API_BASE_URL": JSON.stringify("https://localhost:7030") },
+    build: { write: false, minify: false, lib: { entry: "tests/fixtures/auth-entry.js", formats: ["iife"], name: "AuthTest" } },
+  });
+  bundle = (Array.isArray(result) ? result[0] : result).output.find(item => item.type === "chunk").code;
+});
+const jwt = (label, seconds = 900) => `header.${Buffer.from(JSON.stringify({ sub: "alice", role: "User", label, exp: Math.floor(Date.now() / 1000) + seconds })).toString("base64url")}.signature`;
+const authData = label => ({ token: jwt(label), email: "alice@example.test", firstName: "Alice",
+  accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 604800000).toISOString() });
+const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+
+// Separate JS realms model tab-local memory; only metadata, locks and messages are shared.
+function browser(fetcher) {
+  const values = new Map();
+  const channels = [];
+  let queue = Promise.resolve();
+  let handler = fetcher;
+  const requests = [];
+  function tab() {
+    const window = new EventTarget();
+    window.navigator = { locks: { request: (_name, action) => {
+      const result = queue.then(action);
+      queue = result.catch(() => {});
+      return result;
+    } } };
+    window.BroadcastChannel = class {
+      constructor() { channels.push(this); }
+      postMessage(data) {
+        for (const target of channels) if (target !== this) queueMicrotask(() => target.onmessage?.({ data: structuredClone(data) }));
+      }
+    };
+    const localStorage = {
+      getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value),
+      removeItem: key => values.delete(key),
+    };
+    const context = vm.createContext({ window, localStorage, Event, Headers, Response, AbortSignal,
+      TextDecoder, Uint8Array, atob, crypto: globalThis.crypto, setTimeout, clearTimeout,
+      fetch: async (url, options) => { requests.push({ url, ...options }); return handler(url, options); },
+    });
+    vm.runInContext(bundle, context);
+    return context.AuthTest;
+  }
+  return { tab, values, requests, setFetch: next => { handler = next; } };
+}
+function loginFixture(tab, label = "old") {
+  const data = authData(label);
+  tab.saveSession(data.token, { email: data.email }, data);
+  return data;
+}
+
+test("login/register accept cookies, retain expiry and never persist tokens", async () => {
+  const env = browser(() => json(authData("login")));
+  env.values.set("shopHub.auth", "legacy-jwt");
+  const tab = env.tab();
+  await tab.authenticate("login", { email: "alice@example.test", password: "fixture" });
+  const req = env.requests[0];
+  assert.equal(req.credentials, "include");
+  assert.equal(req.headers.has("Authorization"), false);
+  assert.equal(tab.getSession().user.email, "alice@example.test");
+  assert.equal(env.values.has("shopHub.auth"), false);
+  assert.equal([...env.values.values()].join("").includes("signature"), false);
+  await tab.authenticate("register", { email: "alice@example.test", password: "fixture" });
+  assert.equal(env.requests[1].credentials, "include");
+});
+
+test("concurrent 401s share one refresh, preserve session identity and retry exact checkout payload", async () => {
+  const renewed = authData("new");
+  const env = browser((url, options) => url.endsWith("/refresh") ? json(renewed)
+    : options.headers.get("Authorization") === `Bearer ${renewed.token}` ? json({ ok: true }) : json({}, 401));
+  const tab = env.tab();
+  loginFixture(tab);
+  const id = tab.getSession().sessionKey;
+  const payload = { requestId: "same-request", items: [{ productId: 1, quantity: 2 }], deliveryAddress: { city: "Bengaluru" } };
+  const orderRequest = tab.apiRequest("/api/orders", { method: "POST", json: payload });
+  payload.deliveryAddress.city = "Edited while waiting";
+  const results = await Promise.all([orderRequest, tab.apiRequest("/api/cart")]);
+  assert.equal(results.every(result => result.data.ok), true);
+  assert.equal(env.requests.filter(req => req.url.endsWith("/refresh")).length, 1);
+  const refresh = env.requests.find(req => req.url.endsWith("/refresh"));
+  assert.equal(refresh.credentials, "include");
+  assert.equal(refresh.headers.get("X-Refresh-Token"), "1");
+  assert.equal(refresh.headers.has("Authorization"), false);
+  assert.equal(refresh.body, undefined);
+  const orders = env.requests.filter(req => req.url.endsWith("/orders"));
+  assert.equal(orders.length, 2);
+  assert.equal(orders[0].body, orders[1].body);
+  assert.equal(JSON.parse(orders[1].body).deliveryAddress.city, "Bengaluru");
+  assert.equal(tab.getSession().sessionKey, id);
+});
+
+test("two tabs serialize rotation, share fresh tokens and propagate logout", async () => {
+  const renewed = authData("rotated");
+  const env = browser(url => url.endsWith("/logout") ? json({ message: "done" }) : json(renewed));
+  const a = env.tab(), b = env.tab();
+  b.initializeAuthStorage();
+  const old = loginFixture(a);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(b.getSession().token, old.token);
+  await Promise.all([a.refreshSession(old.token), b.refreshSession(old.token)]);
+  assert.equal(env.requests.length, 1);
+  assert.equal(a.getSession().token, b.getSession().token);
+  await b.logout();
+  assert.equal(a.getSession(), null);
+  assert.equal(b.getSession(), null);
+  const count = env.requests.length;
+  assert.equal(await a.restoreSession(), null);
+  assert.equal(env.requests.length, count);
+});
+
+test("simultaneous startup in empty tabs restores once and gives both the same identity", async () => {
+  const env = browser(() => json(authData("restored")));
+  const a = env.tab(), b = env.tab();
+  await Promise.all([a.restoreSession(), b.restoreSession()]);
+  assert.equal(env.requests.length, 1);
+  assert.equal(a.getSession().sessionKey, b.getSession().sessionKey);
+});
+
+test("refresh 401 ends session; a failed retry cannot recurse; 403 never refreshes", async () => {
+  const env = browser(() => json({}, 401));
+  const tab = env.tab();
+  loginFixture(tab);
+  await assert.rejects(tab.apiRequest("/api/cart"), error => error.status === 401);
+  assert.equal(env.requests.length, 2);
+  assert.equal(tab.getSession(), null);
+  loginFixture(tab);
+  env.setFetch(url => url.endsWith("/refresh") ? json(authData("new")) : json({}, 401));
+  await assert.rejects(tab.apiRequest("/api/cart"), error => error.status === 401);
+  assert.equal(env.requests.length, 5);
+  assert.equal(tab.getSession(), null);
+  loginFixture(tab);
+  env.setFetch(() => json({}, 403));
+  await assert.rejects(tab.apiRequest("/api/cart"), error => error.status === 403);
+  assert.equal(env.requests.length, 6);
+  assert.ok(tab.getSession());
+});
+
+test("lost refresh response and interrupted tab prevent another automatic rotation, including after reload", async () => {
+  const env = browser(() => { throw new TypeError("Failed to fetch"); });
+  const tab = env.tab();
+  const old = loginFixture(tab);
+  await assert.rejects(tab.refreshSession(old.token), /Failed to fetch/);
+  await assert.rejects(tab.refreshSession(old.token));
+  const reloaded = env.tab();
+  assert.equal(await reloaded.restoreSession(), null);
+  assert.equal(env.requests.length, 1);
+  assert.equal(tab.getSession().token, old.token);
+  tab.setAuthMetadata({ id: "interrupted", pending: true });
+  await assert.rejects(reloaded.restoreSession(), /interrupted/);
+  assert.equal(env.requests.length, 1);
+});
+
+test("logout during refresh clears immediately and cannot be undone by its response", async () => {
+  const started = deferred(), response = deferred();
+  const env = browser(url => {
+    if (url.endsWith("/refresh")) { started.resolve(); return response.promise; }
+    return json({ message: "logged out" });
+  });
+  const a = env.tab(), b = env.tab();
+  b.initializeAuthStorage();
+  const old = loginFixture(a);
+  const refresh = a.refreshSession(old.token);
+  const rejected = assert.rejects(refresh, /session changed/);
+  await started.promise;
+  const logout = b.logout();
+  assert.equal(a.getSession(), null);
+  response.resolve(json(authData("late")));
+  await Promise.all([rejected, logout]);
+  assert.equal(a.getSession(), null);
+  assert.equal(b.getSession(), null);
+  assert.equal(env.requests.at(-1).url.endsWith("/logout"), true);
+});
+
+test("old API response cannot refresh or replay under a newer login", async () => {
+  const response = deferred();
+  const env = browser(() => response.promise);
+  const tab = env.tab();
+  loginFixture(tab);
+  const pending = tab.apiRequest("/api/orders", { method: "POST", json: { requestId: "old" } });
+  loginFixture(tab, "new-login");
+  response.resolve(json({}, 401));
+  await assert.rejects(pending, /session changed/);
+  assert.equal(env.requests.length, 1);
+  assert.equal(tab.getSession().token, jwt("new-login"));
+});
+
+test("near-expiry tokens refresh before request; cancelling a waiter does not cancel shared refresh", async () => {
+  const started = deferred(), response = deferred();
+  const env = browser(url => {
+    if (url.endsWith("/refresh")) { started.resolve(); return response.promise; }
+    return json({ ok: true });
+  });
+  const tab = env.tab();
+  tab.saveSession(jwt("near", 2), { email: "alice@example.test" });
+  const controller = new AbortController();
+  const first = tab.apiRequest("/api/cart", { signal: controller.signal });
+  const rejected = assert.rejects(first, error => error.name === "AbortError");
+  const second = tab.apiRequest("/api/orders");
+  await started.promise;
+  controller.abort();
+  response.resolve(json(authData("new")));
+  await rejected;
+  assert.equal((await second).data.ok, true);
+  assert.equal(env.requests.length, 2);
+});
+
+test("failed logout stays signed out across reloads", async () => {
+  const env = browser(() => { throw new TypeError("offline"); });
+  const tab = env.tab();
+  loginFixture(tab);
+  await assert.rejects(tab.logout(), /offline/);
+  assert.equal(tab.getSession(), null);
+  assert.match(tab.authMetadata().message, /server logout/);
+  assert.equal(await env.tab().restoreSession(), null);
+  assert.equal(env.requests.length, 1);
+});
+
+test("refresh configuration failures and malformed success do not loop or erase an access session", async () => {
+  for (const response of [() => json({}, 400), () => json({}, 403), () => json({}, 500), () => json({ token: jwt("new") })]) {
+    const env = browser(response);
+    const tab = env.tab();
+    const old = loginFixture(tab);
+    await assert.rejects(tab.refreshSession(old.token));
+    await assert.rejects(tab.refreshSession(old.token));
+    assert.equal(env.requests.length, 1);
+    assert.equal(tab.getSession().token, old.token);
+    assert.equal(tab.authMetadata().blocked, true);
+  }
+});
+
+test("late 401 reuses the current token and preserves multipart and binary behavior", async () => {
+  const delayed = deferred();
+  const renewed = authData("new");
+  let businessCalls = 0;
+  const env = browser((url, options) => {
+    if (url.endsWith("/refresh")) return json(renewed);
+    if (options.headers.get("Authorization") === `Bearer ${renewed.token}`) {
+      return new Response(new Uint8Array([1, 2, 3]));
+    }
+    return ++businessCalls === 1 ? delayed.promise : json({}, 401);
+  });
+  const tab = env.tab();
+  loginFixture(tab);
+  const body = new FormData();
+  body.set("file", new Blob(["image"]), "test.png");
+  const first = tab.apiRequest("/api/images", { method: "POST", body, responseType: "blob" });
+  await tab.apiRequest("/api/images", { responseType: "blob" });
+  delayed.resolve(json({}, 401));
+  const result = await first;
+  assert.deepEqual([...new Uint8Array(await result.data.arrayBuffer())], [1, 2, 3]);
+  assert.equal(env.requests.filter(req => req.url.endsWith("/refresh")).length, 1);
+  const uploads = env.requests.filter(req => req.method === "POST" && req.url.endsWith("/images"));
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[0].body, uploads[1].body);
+  assert.equal(uploads[1].headers.has("Content-Type"), false);
+});
+
+test("a refresh cannot change accounts inside an existing frontend session", async () => {
+  const data = authData("other");
+  data.token = `header.${Buffer.from(JSON.stringify({ sub: "bob", exp: Math.floor(Date.now() / 1000) + 900 })).toString("base64url")}.signature`;
+  const env = browser(() => json(data));
+  const tab = env.tab();
+  const old = loginFixture(tab);
+  await assert.rejects(tab.refreshSession(old.token), /another account/);
+  assert.equal(tab.getSession().user.id, "alice");
+  assert.equal(tab.authMetadata().blocked, true);
+});
+
+test("an uncertain login cannot restore an unconfirmed cookie into the previous session", async () => {
+  const env = browser(() => json({ token: jwt("new") }));
+  const tab = env.tab();
+  loginFixture(tab);
+  await assert.rejects(tab.authenticate("login", { email: "bob@example.test", password: "fixture" }), /expiry/);
+  assert.equal(tab.getSession(), null);
+  assert.equal(await env.tab().restoreSession(), null);
+  assert.equal(env.requests.length, 1);
+});

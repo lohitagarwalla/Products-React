@@ -41,6 +41,7 @@ test("product API contract, publication payload, multipart uploads, binary reads
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   const values = new Map();
   globalThis.window = new EventTarget(); globalThis.window.location = { origin: "http://localhost:5173" };
+  window.navigator = { locks: { request: async (_name, action) => action() } };
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
     getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key),
   } });
@@ -129,6 +130,7 @@ test("product API contract, publication payload, multipart uploads, binary reads
       assert.equal(requests.at(-1).method, method);
       if (body) assert.deepEqual(JSON.parse(requests.at(-1).body), body);
     }
+    replies.push(new Response(null, { status: 401 }));
     replies.push(new Response(null, { status: 401 }));
     await assert.rejects(products.getProductPriceHistory(42), error => error.status === 401);
     assert.equal(storage.getSession(), null);

@@ -63,7 +63,6 @@ export default function Login() {
           </form>
           <div className="auth-switch">
             <p>Don't have an account? <Link className="auth-link" to="/signup" state={location.state}>Sign Up</Link></p>
-            <p>Demo account: lohitagarwalla@gmail.com / password: Lohit123</p>
           </div>
         </div>
       </div>

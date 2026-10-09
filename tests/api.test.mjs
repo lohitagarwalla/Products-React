@@ -21,6 +21,7 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
   const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   const values = new Map();
   globalThis.window = new EventTarget(); globalThis.window.location = { origin: "http://localhost:5173" };
+  window.navigator = { locks: { request: async (_name, action) => action() } };
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
     getItem: key => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),
@@ -35,7 +36,7 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
     let nextResponse;
     globalThis.fetch = async (url, options) => {
       request = { url, ...options };
-      return nextResponse;
+      return nextResponse.clone();
     };
     const json = (body, status = 200) => new Response(JSON.stringify(body), {
       status, headers: { "Content-Type": "application/json" },
@@ -91,22 +92,26 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
       [auth.login, "/api/auth/login", credentials],
       [auth.signUp, "/api/auth/register", registration],
     ]) {
-      nextResponse = json({ token: newToken }, 201);
+      const expiry = { accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 604800000).toISOString() };
+      nextResponse = json({ token: newToken, ...expiry }, 201);
       assert.deepEqual(await method({ ...registration, phoneNumber: `  ${registration.phoneNumber}  ` }), {
-        token: newToken, user: { email: "test@example.com", firstName: "" },
+        token: newToken, ...expiry, user: { email: "test@example.com", firstName: "" },
       });
       assert.equal(request.headers.has("Authorization"), false);
+      assert.equal(request.credentials, "include");
       assert.equal(request.method, "POST");
       assert.equal(new URL(request.url).pathname, path);
       assert.deepEqual(JSON.parse(request.body), payload);
     }
-    nextResponse = json({ token: newToken, firstName: "  Mary Jane  " });
+    nextResponse = json({ token: newToken, firstName: "  Mary Jane  ", accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 604800000).toISOString() });
     const namedSession = await auth.login(credentials);
     storage.saveSession(namedSession.token, namedSession.user);
     assert.equal(storage.getSession().user.firstName, "Mary Jane");
     storage.saveSession(testToken, { email: "test@example.com" });
     nextResponse = json({});
     await assert.rejects(auth.login(credentials), /did not contain a token/);
+    assert.equal(storage.getSession(), null);
+    storage.saveSession(testToken, { email: "test@example.com" });
 
     nextResponse = new Response(null, { status: 204 });
     assert.deepEqual(await apiRequest("/api/products/1", { method: "DELETE" }), { status: 204, data: null });

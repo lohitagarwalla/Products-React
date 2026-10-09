@@ -29,9 +29,9 @@ export default function Signup() {
   return (
     <div className="page">
       <div className="container">
-        <div className="auth-container">
+        <div className="auth-container signup-container">
           <h1 className="page-title">Sign Up</h1>
-          <form className="auth-form" onSubmit={handleSubmit(onSubmit)}>
+          <form className="auth-form signup-form" onSubmit={handleSubmit(onSubmit)}>
             {error && <div className="error-message" role="alert">{error}</div>}
             <div className="form-group">
               <label className="form-label" htmlFor="firstname">First name</label>
@@ -81,7 +81,7 @@ export default function Signup() {
                 autoComplete="tel"
                 aria-required="true"
                 aria-invalid={!!errors.phoneNumber}
-                aria-describedby={errors.phoneNumber ? "signup-phone-hint signup-phone-error" : "signup-phone-hint"}
+                aria-describedby={errors.phoneNumber ? "signup-phone-error" : undefined}
                 {...register("phoneNumber", {
                   required: "Phone number is required",
                   setValueAs: value => value.trim(),
@@ -89,7 +89,6 @@ export default function Signup() {
                     || "Enter a valid Indian mobile number: 10 digits starting with 6, 7, 8, or 9, optionally prefixed with +91.",
                 })}
               />
-              <p id="signup-phone-hint" className="muted">Enter an Indian mobile number, such as 9876543210 or +919876543210.</p>
               {errors.phoneNumber && <span id="signup-phone-error" className="form-error" role="alert">{errors.phoneNumber.message}</span>}
             </div>
             <div className="form-group">

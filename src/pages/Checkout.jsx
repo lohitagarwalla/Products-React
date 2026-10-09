@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -58,13 +58,13 @@ function CheckoutContent() {
       }
       sent = true;
       const order = await createOrder(attempt);
-      if (getSession()?.token !== sessionKey) return;
+      if (getSession()?.sessionKey !== sessionKey) return;
       clearCheckout(user.id);
       await refreshCart();
-      if (getSession()?.token !== sessionKey) return;
+      if (getSession()?.sessionKey !== sessionKey) return;
       navigate(`/orders/${order.id}`, { replace: true, state: { orderConfirmed: true } });
     } catch (failure) {
-      if (getSession()?.token !== sessionKey) return;
+      if (getSession()?.sessionKey !== sessionKey) return;
       setRejected(failure.status === 400);
       setError(failure.status === 409
         ? "This checkout ID is associated with different items or delivery details. Review My orders before resolving the saved checkout."
@@ -73,7 +73,7 @@ function CheckoutContent() {
           : orderError(failure));
     } finally {
       submitting.current = false;
-      if (getSession()?.token === sessionKey) setBusy(false);
+      if (getSession()?.sessionKey === sessionKey) setBusy(false);
     }
   }
 

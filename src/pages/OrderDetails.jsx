@@ -32,11 +32,11 @@ function Details({ id, manage }) {
     inFlight.current = true; setBusy(true); setNotice(null);
     try {
       const updated = await changeOrderStatus(order.id, action, order.rowVersion, reason);
-      if (getSession()?.token !== sessionKey) return;
+      if (getSession()?.sessionKey !== sessionKey) return;
       replaceOrder(updated);
       setNotice({ text: `Order updated: ${updated.status}.`, success: true });
     } catch (failure) {
-      if (getSession()?.token !== sessionKey) return;
+      if (getSession()?.sessionKey !== sessionKey) return;
       setNotice({
         text: failure.status === 409
           ? "This order changed or the action is no longer allowed. Review the refreshed order before choosing another action."
@@ -47,7 +47,7 @@ function Details({ id, manage }) {
       reload();
     } finally {
       inFlight.current = false;
-      if (getSession()?.token === sessionKey) { setBusy(false); setAction(null); }
+      if (getSession()?.sessionKey === sessionKey) { setBusy(false); setAction(null); }
     }
   }
 

@@ -1,31 +1,9 @@
-import { apiRequest } from "./api";
-import { readJwt } from "./jwt";
+import { authenticate } from "./authSession";
+export { logout, restoreSession } from "./authSession";
 
-// Match these paths to your .NET controller routes.
-const endpoints = { login: "/api/auth/login", signUp: "/api/auth/register" };
-
-function readSession(data, email) {
-  // Expected response: { token: "...", email?: "..." }.
-  // Change data.token here if your backend uses data.accessToken.
-  if (typeof data?.token !== "string" || !data.token.trim()) {
-    throw new Error("The authentication response did not contain a token.");
-  }
-  if (!readJwt(data.token)) throw new Error("The authentication token is invalid or expired. Please log in again.");
-  return { token: data.token, user: { email: data.email || email,
-    firstName: typeof data.firstName === "string" ? data.firstName.trim() : readJwt(data.token).firstName } };
+export function login({ email, password }) {
+  return authenticate("login", { email, password });
 }
-
-export async function login({ email, password }) {
-  const { data } = await apiRequest(endpoints.login, {
-    method: "POST", auth: false, json: { email, password },
-  });
-  return readSession(data, email);
-}
-
-export async function signUp({ firstname, lastname, email, phoneNumber, password, confirmPassword }) {
-  const { data } = await apiRequest(endpoints.signUp, {
-    method: "POST", auth: false,
-    json: { firstname, lastname, email, phoneNumber: phoneNumber.trim(), password, confirmPassword },
-  });
-  return readSession(data, email);
+export function signUp({ firstname, lastname, email, phoneNumber, password, confirmPassword }) {
+  return authenticate("register", { firstname, lastname, email, phoneNumber: phoneNumber.trim(), password, confirmPassword });
 }
