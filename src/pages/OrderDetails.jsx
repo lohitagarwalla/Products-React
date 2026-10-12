@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../hooks/useOrders";
 import { getSession } from "../services/authStorage";
@@ -23,9 +23,6 @@ function Details({ id, manage }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const inFlight = useRef(false);
-  const root = manage ? "/admin/orders" : "/orders";
-  const from = location.state?.from;
-  const back = typeof from === "string" && (from === root || from.startsWith(`${root}?`)) ? from : root;
 
   async function confirm(reason) {
     if (inFlight.current || !order) return;
