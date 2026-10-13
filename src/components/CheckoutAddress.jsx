@@ -5,6 +5,7 @@ function AddressDetails({ address }) {
   return <div className="checkout-address-details">
     <p><strong>{address.recipientName}</strong>{", "}
       {[address.addressLine1, address.addressLine2, address.city, address.state, address.postalCode, address.countryCode].filter(Boolean).join(", ")}
+      {address.phoneNumber && <> · Phone: {address.phoneNumber}</>}
     </p>
   </div>;
 }

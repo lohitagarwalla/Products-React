@@ -71,7 +71,9 @@ function Details({ id, manage }) {
         </button>)}</div>
       </section>
       {order.deliveryAddress && <section className="panel"><h2>Delivery address</h2>
-        <p><strong>{order.deliveryAddress.recipientName}</strong>{", "}{[order.deliveryAddress.addressLine1, order.deliveryAddress.addressLine2, order.deliveryAddress.city, order.deliveryAddress.state, order.deliveryAddress.postalCode, order.deliveryAddress.countryCode].filter(Boolean).join(", ")}</p>
+        <p><strong>{order.deliveryAddress.recipientName}</strong>{", "}{[order.deliveryAddress.addressLine1, order.deliveryAddress.addressLine2, order.deliveryAddress.city, order.deliveryAddress.state, order.deliveryAddress.postalCode, order.deliveryAddress.countryCode].filter(Boolean).join(", ")}
+          {order.deliveryAddress.phoneNumber?.trim() && <> · Phone: {order.deliveryAddress.phoneNumber}</>}
+        </p>
       </section>}
       <section className="panel"><h2>Items</h2>
         {order.items.map(item => <article className="order-item" key={item.id}>
