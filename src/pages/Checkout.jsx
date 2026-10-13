@@ -82,9 +82,8 @@ function CheckoutContent() {
     catch { setError("Unable to update checkout recovery storage."); }
   }
 
-  return <main className="page"><div className="container">
+  return <main className="page checkout-page"><div className="container">
     <h1 className="page-title">Checkout</h1>
-    <p className="muted">Review your items before placing an order. Final prices are calculated when your order is placed.</p>
     {(error || storageError) && <p className="error-message" role="alert">{error || storageError}</p>}
     {pending && <section className="panel" aria-label="Pending checkout">
       <h2>Finish your pending checkout</h2>

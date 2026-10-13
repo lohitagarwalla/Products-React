@@ -81,7 +81,6 @@ export default function CheckoutAddress({ isAuthenticated, userId, addressState,
           </> : addresses.length ? <p>Select a delivery address from your saved addresses.</p>
             : <p>No saved addresses yet. <Link to="/profile">Add an address</Link></p>}
         </>}
-        <p className="muted checkout-address-notice">Your selection is saved with your cart. Delivery details are saved with your order when you place it.</p>
       </>}
     {selecting && <AddressSelector addresses={addresses} selectedId={selectedId} loading={loading} error={error}
       disabled={disabled} triggerRef={trigger} onRetry={refresh} onSelect={selectAddress} onClose={() => setSelecting(false)} />}
