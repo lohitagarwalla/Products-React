@@ -43,14 +43,14 @@ export default function AddressForm({ address, busy, blocked = false, operation,
             const message = errors[field.name]?.message || fieldServerError(field.name);
             return <div key={field.name} className={`form-group${field.wide ? " address-field-wide" : ""}`}>
               <label className="form-label" htmlFor={id}>{field.label}</label>
-              <input id={id} className="form-input" autoComplete={field.autoComplete} maxLength={field.maxLength}
+              <input id={id} className="form-input" type={field.type || "text"} autoComplete={field.autoComplete} maxLength={field.maxLength}
                 autoFocus={field.name === "recipientName"} aria-required={field.required || undefined}
-                aria-invalid={!!message} aria-describedby={message ? `${id}-error` : field.name === "countryCode" ? `${id}-hint` : undefined}
+                aria-invalid={!!message} aria-describedby={[field.hint && `${id}-hint`, message && `${id}-error`].filter(Boolean).join(" ") || undefined}
                 {...register(field.name, {
                   validate: (value, values) => addressFieldError(field.name, value, values) || true,
                   ...(field.name === "countryCode" ? { deps: ["postalCode"] } : {}),
                 })} />
-              {field.name === "countryCode" && <p id={`${id}-hint`} className="muted">Two-letter code, such as IN.</p>}
+              {field.hint && <p id={`${id}-hint`} className="muted">{field.hint}</p>}
               {message && <span id={`${id}-error`} className="form-error" role="alert">{message}</span>}
             </div>;
           })}

@@ -204,6 +204,7 @@ export default function ProfileAddresses() {
             {editor?.address?.id === address.id ? form : <>
               <div className="address-label-row"><h3>{address.label || "Address"}</h3>{address.isDefault && <span className="badge published">Default</span>}</div>
               <p>{address.recipientName}</p>
+              {address.phoneNumber && <p>Phone: {address.phoneNumber}</p>}
               <p className="address-details">{[address.addressLine1, address.addressLine2, address.city, address.state, address.postalCode, address.countryCode].filter(Boolean).join(", ")}</p>
               <div className="toolbar address-actions">
                 <button type="button" className="btn btn-secondary" disabled={busy || !!discardAction} onClick={() => openEditor(address)}>Edit</button>

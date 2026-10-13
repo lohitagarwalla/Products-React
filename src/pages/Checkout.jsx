@@ -82,15 +82,16 @@ function CheckoutContent() {
     catch { setError("Unable to update checkout recovery storage."); }
   }
 
-  return <main className="page"><div className="container">
+  return <main className="page checkout-page"><div className="container">
     <h1 className="page-title">Checkout</h1>
-    <p className="muted">Review your items before placing an order. Final prices are calculated when your order is placed.</p>
     {(error || storageError) && <p className="error-message" role="alert">{error || storageError}</p>}
     {pending && <section className="panel" aria-label="Pending checkout">
       <h2>Finish your pending checkout</h2>
       <p>This attempt contains {pending.items.reduce((sum, item) => sum + item.quantity, 0)} items. Retry to confirm its result before editing your cart.</p>
       <ul>{pending.items.map(item => <li key={item.productId}>Product #{item.productId} · Quantity {item.quantity}</li>)}</ul>
-      {pending.deliveryAddress && <p>Delivery to {pending.deliveryAddress.recipientName}: {[pending.deliveryAddress.addressLine1, pending.deliveryAddress.addressLine2, pending.deliveryAddress.city, pending.deliveryAddress.state, pending.deliveryAddress.postalCode, pending.deliveryAddress.countryCode].filter(Boolean).join(", ")}</p>}
+      {pending.deliveryAddress && <p>Delivery to {pending.deliveryAddress.recipientName}: {[pending.deliveryAddress.addressLine1, pending.deliveryAddress.addressLine2, pending.deliveryAddress.city, pending.deliveryAddress.state, pending.deliveryAddress.postalCode, pending.deliveryAddress.countryCode].filter(Boolean).join(", ")}
+        {pending.deliveryAddress.phoneNumber && <> · Phone: {pending.deliveryAddress.phoneNumber}</>}
+      </p>}
       {legacyPending && <p className="error-message" role="alert">This older attempt has no saved delivery address and cannot be retried. Review My orders before starting a new checkout.</p>}
       <div className="toolbar">
         <button className="btn btn-primary" disabled={busy || legacyPending} onClick={submit}>{busy ? "Confirming order…" : "Retry checkout"}</button>
