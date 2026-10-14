@@ -23,7 +23,9 @@ function readSession(data, email) {
   }
   return { token: data.token, accessTokenExpiresAt: data.accessTokenExpiresAt,
     refreshTokenExpiresAt: data.refreshTokenExpiresAt,
-    user: { email: data.email || email || "", firstName: typeof data.firstName === "string" ? data.firstName.trim() : claims.firstName } };
+    user: { email: data.email || email || "", firstName: typeof data.firstName === "string" ? data.firstName.trim() : claims.firstName,
+      lastName: typeof data.lastName === "string" ? data.lastName.trim() : "",
+      phoneNumber: typeof data.phoneNumber === "string" ? data.phoneNumber.trim() : "" } };
 }
 function cookieRequest(path, json) {
   return httpRequest(`/api/auth/${path}`, {

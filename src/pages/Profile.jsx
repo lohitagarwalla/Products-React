@@ -8,9 +8,9 @@ export default function Profile() {
   // Until profile endpoints exist, use session identity and keep edits on this page only.
   const [profile, setProfile] = useState(() => ({
     firstName: user.firstName || "",
-    lastName: "",
+    lastName: user.lastName || "",
     email: user.email || "",
-    phoneNumber: "",
+    phoneNumber: user.phoneNumber || "",
   }));
   const [editing, setEditing] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -27,7 +27,6 @@ export default function Profile() {
         <h1 className="page-title">Profile</h1>
         <section className="panel" aria-label="Profile details">
           <p className="muted">Profile detail changes are temporary and will reset when you leave or reload this page.</p>
-          <p className="muted">Only your first name and email are available from your current session. Other profile details are not loaded yet.</p>
           {applied && <p className="success-message" role="status">Changes applied to this page only.</p>}
           {editing ? (
             <ProfileForm

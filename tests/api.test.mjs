@@ -95,7 +95,7 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
       const expiry = { accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 604800000).toISOString() };
       nextResponse = json({ token: newToken, ...expiry }, 201);
       assert.deepEqual(await method({ ...registration, phoneNumber: `  ${registration.phoneNumber}  ` }), {
-        token: newToken, ...expiry, user: { email: "test@example.com", firstName: "" },
+        token: newToken, ...expiry, user: { email: "test@example.com", firstName: "", lastName: "", phoneNumber: "" },
       });
       assert.equal(request.headers.has("Authorization"), false);
       assert.equal(request.credentials, "include");
@@ -103,10 +103,12 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
       assert.equal(new URL(request.url).pathname, path);
       assert.deepEqual(JSON.parse(request.body), payload);
     }
-    nextResponse = json({ token: newToken, firstName: "  Mary Jane  ", accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 604800000).toISOString() });
+    nextResponse = json({ token: newToken, firstName: "  Mary Jane  ", lastName: "  Smith  ", phoneNumber: "  +919876543210  ", accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 604800000).toISOString() });
     const namedSession = await auth.login(credentials);
     storage.saveSession(namedSession.token, namedSession.user);
     assert.equal(storage.getSession().user.firstName, "Mary Jane");
+    assert.equal(storage.getSession().user.lastName, "Smith");
+    assert.equal(storage.getSession().user.phoneNumber, "+919876543210");
     storage.saveSession(testToken, { email: "test@example.com" });
     nextResponse = json({});
     await assert.rejects(auth.login(credentials), /did not contain a token/);
