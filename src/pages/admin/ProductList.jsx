@@ -26,7 +26,7 @@ export default function ProductList() {
     finally { setBusy(false); }
   }
   return <main className="page"><div className="container">
-    <div className="page-heading"><div><h1>Manage products</h1><p className="muted">Draft and published products</p></div><Link className="btn btn-primary" to="/admin/products/new">Add product</Link></div>
+    <div className="page-heading"><div><h1>Manage products</h1></div><Link className="btn btn-primary" to="/admin/products/new">Add product</Link></div>
     <ProductSearch {...query} />
     {message && <p className="success-message" role="status">{message}</p>}
     {(error || actionError) && <div className="error-message" role="alert">{error || actionError} <button className="btn btn-secondary" onClick={reload} disabled={busy}>Reload list</button></div>}

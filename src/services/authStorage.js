@@ -62,7 +62,9 @@ export function saveSession(token, user, details = {}) {
     token, sessionKey, revision: (authMetadata().revision ?? 0) + 1,
     expiresAt: Number.isFinite(accessExpiry) ? Math.min(accessExpiry, claims.expiresAt) : claims.expiresAt,
     refreshTokenExpiresAt: details.refreshTokenExpiresAt ?? null,
-    user: { id: claims.userId, email: user.email, firstName: user.firstName?.trim() || claims.firstName, roles: claims.roles },
+    user: { id: claims.userId, email: user.email, firstName: user.firstName?.trim() || claims.firstName,
+      lastName: typeof user.lastName === "string" ? user.lastName.trim() : "",
+      phoneNumber: typeof user.phoneNumber === "string" ? user.phoneNumber.trim() : "", roles: claims.roles },
   };
   setAuthMetadata({ id: sessionKey, revision: session.revision, blocked: false });
   channel?.postMessage({ type: "session", session });
