@@ -91,7 +91,7 @@ export function refreshSession(failedToken) {
         if (error.status === 401) clearSession(current || meta.id ? "Your session expired. Please log in again." : "");
         else blockRefresh(error.status === 400 || error.status === 403
           ? "Session renewal was rejected. Please log in again. If this continues, contact support."
-          : "Session renewal could not be confirmed. Please log in again., error: " + error.message, + " error status " + error.status);
+          : "Session renewal could not be confirmed. Please log in again. error: " + error.message + " error status " + error.status);
       }
       throw error;
     }
