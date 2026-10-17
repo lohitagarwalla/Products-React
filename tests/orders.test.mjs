@@ -74,7 +74,7 @@ test("order contracts, retry semantics, authorization headers, filters and concu
   try {
     const orders = await server.ssrLoadModule("/src/services/orderService.js");
     const { orderFilters } = await server.ssrLoadModule("/src/services/orderFilters.js");
-    const storage = await server.ssrLoadModule("/src/services/authStorage.js");
+    const storage = await server.ssrLoadModule("/src/services/authStore.js");
     const token = `test.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600,
       "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier": "alice",
       "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name": "Alice Customer", role: "Admin" })).toString("base64url")}.signature`;

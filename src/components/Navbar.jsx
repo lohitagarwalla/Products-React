@@ -5,7 +5,7 @@ import AdminMenu from "./AdminMenu";
 import AccountMenu from "./AccountMenu";
 
 export default function Navbar() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, initializing } = useAuth();
   const navigate = useNavigate();
   const { pathname, key: locationKey } = useLocation();
   const [params] = useSearchParams();
@@ -33,7 +33,7 @@ export default function Navbar() {
           <ProductSearch key={pathname} search={search} onSearch={searchProducts} />
         </div>
         <div className="navbar-auth">
-          {!user ? (
+          {initializing ? <span role="status">Restoring your session…</span> : !user ? (
             <div className="navbar-auth-links">
               <Link to="/login" className="btn btn-secondary">
                 Login

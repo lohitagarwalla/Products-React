@@ -47,7 +47,7 @@ test("product API contract, publication payload, multipart uploads, binary reads
   } });
   try {
     const products = await server.ssrLoadModule("/src/services/productService.js");
-    const storage = await server.ssrLoadModule("/src/services/authStorage.js");
+    const storage = await server.ssrLoadModule("/src/services/authStore.js");
     const { apiRequest } = await server.ssrLoadModule("/src/services/api.js");
     const adminToken = token({ [roleClaim]: "Admin" });
     storage.saveSession(adminToken, { email: "admin@example.com", roles: ["Fake"] });

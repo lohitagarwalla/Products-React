@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import * as carts from "../services/cartService";
-import { getSession } from "../services/authStorage";
+import { isCurrentSession } from "../services/authService";
 import { fromMinor, toMinor } from "../services/money";
 import { readCheckout } from "../services/checkoutStorage";
 import { useAuth } from "./AuthContext";
@@ -23,7 +23,7 @@ function SavedCart({ children, sessionKey }) {
   const inFlight = useRef(false);
   const readRequest = useRef(null);
   const active = useRef(true);
-  const currentSession = () => active.current && getSession()?.sessionKey === sessionKey;
+  const currentSession = () => active.current && isCurrentSession(sessionKey);
 
   const refreshCart = useCallback(async () => {
     if (!user?.id || inFlight.current) return false;
@@ -34,11 +34,11 @@ function SavedCart({ children, sessionKey }) {
     setCartError("");
     try {
       const result = await carts.getCart({ signal: controller.signal });
-      if (controller.signal.aborted || !active.current || getSession()?.sessionKey !== sessionKey) return false;
+      if (controller.signal.aborted || !active.current || !isCurrentSession(sessionKey)) return false;
       setCart(result);
       return true;
     } catch (failure) {
-      if (!controller.signal.aborted && active.current && getSession()?.sessionKey === sessionKey) setCartError(carts.cartError(failure));
+      if (!controller.signal.aborted && active.current && isCurrentSession(sessionKey)) setCartError(carts.cartError(failure));
       return false;
     } finally {
       if (readRequest.current === controller) {

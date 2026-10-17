@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../hooks/useOrders";
-import { getSession } from "../services/authStorage";
+import { isCurrentSession } from "../services/authService";
 import { allowedOrderActions, changeOrderStatus, orderError } from "../services/orderService";
 import { formatMoney } from "../services/money";
 import { formatOrderDate } from "../services/orderFilters";
@@ -29,11 +29,11 @@ function Details({ id, manage }) {
     inFlight.current = true; setBusy(true); setNotice(null);
     try {
       const updated = await changeOrderStatus(order.id, action, order.rowVersion, reason);
-      if (getSession()?.sessionKey !== sessionKey) return;
+      if (!isCurrentSession(sessionKey)) return;
       replaceOrder(updated);
       setNotice({ text: `Order updated: ${updated.status}.`, success: true });
     } catch (failure) {
-      if (getSession()?.sessionKey !== sessionKey) return;
+      if (!isCurrentSession(sessionKey)) return;
       setNotice({
         text: failure.status === 409
           ? "This order changed or the action is no longer allowed. Review the refreshed order before choosing another action."
@@ -44,7 +44,7 @@ function Details({ id, manage }) {
       reload();
     } finally {
       inFlight.current = false;
-      if (getSession()?.sessionKey === sessionKey) { setBusy(false); setAction(null); }
+      if (isCurrentSession(sessionKey)) { setBusy(false); setAction(null); }
     }
   }
 

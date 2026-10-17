@@ -7,7 +7,7 @@ export default function Login() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, initializing } = useAuth();
   const {
     register,
     handleSubmit,
@@ -57,8 +57,8 @@ export default function Login() {
               />
               {errors.password && <span className="form-error">{errors.password.message}</span>}
             </div>
-            <button type="submit" disabled={isSubmitting} className="btn btn-primary btn-large">
-              {isSubmitting ? "Please wait..." : "Login"}
+            <button type="submit" disabled={isSubmitting || initializing} className="btn btn-primary btn-large">
+              {initializing ? "Restoring your session…" : isSubmitting ? "Please wait..." : "Login"}
             </button>
           </form>
           <div className="auth-switch">

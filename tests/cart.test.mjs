@@ -16,7 +16,7 @@ test("saved cart API uses authenticated absolute quantities and preserves decima
   } });
   try {
     const carts = await server.ssrLoadModule("/src/services/cartService.js");
-    const auth = await server.ssrLoadModule("/src/services/authStorage.js");
+    const auth = await server.ssrLoadModule("/src/services/authStore.js");
     const token = `fixture.${Buffer.from(JSON.stringify({ sub: "alice", exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.signature`;
     auth.saveSession(token, { email: "alice@example.test" });
     const requests = [];

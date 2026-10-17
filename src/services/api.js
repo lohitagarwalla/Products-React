@@ -1,5 +1,5 @@
-import { clearSession, getSession } from "./authStorage";
-import { refreshSession } from "./authSession";
+import { clearSession, getSession } from "./authStore";
+import { getAccessSession } from "./authService";
 import { httpRequest } from "./http";
 export { ApiError, apiUrl } from "./http";
 
@@ -13,8 +13,7 @@ export async function apiRequest(path, { auth = true, json, ...options } = {}) {
     options = { ...options, headers, body: JSON.stringify(json) };
   }
   const original = auth ? getSession() : null;
-  let current = original;
-  if (current && current.expiresAt <= Date.now() + 5000) current = await refreshSession(current.token);
+  const current = auth ? await getAccessSession() : null;
   const assertCurrent = () => {
     options.signal?.throwIfAborted();
     if (original && getSession()?.sessionKey !== original.sessionKey) throw new Error("Your session changed. Please try again.");
@@ -27,9 +26,7 @@ export async function apiRequest(path, { auth = true, json, ...options } = {}) {
   } catch (error) {
     if (error.status !== 401 || !current || !auth) throw error;
     assertCurrent();
-    const latest = getSession();
-    const renewed = latest?.token !== current.token && latest?.expiresAt > Date.now()
-      ? latest : await refreshSession(current.token);
+    const renewed = await getAccessSession(current.token);
     assertCurrent();
     try {
       const result = await httpRequest(path, { ...options, token: renewed.token });

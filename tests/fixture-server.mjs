@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { orderFixture } from "./order-fixture.mjs";
 import { cartFixture } from "./cart-fixture.mjs";
+import { randomUUID } from "node:crypto";
 
 const roleClaim = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
 const products = new Map();
@@ -39,6 +40,10 @@ function recordPrice(product, previousPrice, userId, entryType) {
 }
 for (const product of products.values()) recordPrice(product, null, null, "Baseline");
 const token = email => `fixture.${Buffer.from(JSON.stringify({ sub: email, exp: Math.floor(Date.now() / 1000) + 3600, [roleClaim]: email === "admin@example.test" ? "Admin" : "User" })).toString("base64url")}.test-only`;
+const refreshSessions = new Map();
+const authData = email => ({ email, token: token(email),
+  accessTokenExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+  refreshTokenExpiresAt: new Date(Date.now() + 86400000).toISOString() });
 
 const server = await createServer({
   configFile: false,
@@ -59,10 +64,30 @@ const server = await createServer({
         const body = Buffer.concat(chunks);
         const json = () => JSON.parse(body.toString() || "{}");
         const path = url.pathname;
+        const refreshId = req.headers.cookie?.split("; ").find(value => value.startsWith("fixture-refresh="))?.split("=")[1];
+        const rotateCookie = email => {
+          if (refreshId) refreshSessions.delete(refreshId);
+          const id = randomUUID();
+          refreshSessions.set(id, email);
+          // Local fixture only; production cookie policy belongs to the real API.
+          res.setHeader("Set-Cookie", `fixture-refresh=${id}; HttpOnly; SameSite=Lax; Path=/api/auth`);
+        };
+        if (path === "/api/auth/refresh" && req.method === "POST") {
+          const email = refreshSessions.get(refreshId);
+          if (!email) return send(401, { title: "No fixture session" });
+          rotateCookie(email);
+          return send(200, authData(email));
+        }
+        if (path === "/api/auth/logout" && req.method === "POST") {
+          refreshSessions.delete(refreshId);
+          res.setHeader("Set-Cookie", "fixture-refresh=; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=0");
+          return send(204);
+        }
         if (path === "/api/auth/login" && req.method === "POST") {
           const credentials = json();
           if (!["admin@example.test", "member@example.test"].includes(credentials.email) || credentials.password !== "Test123") return send(401, { title: "Use a fixture account and Test123" });
-          return send(200, { email: credentials.email, token: token(credentials.email) });
+          rotateCookie(credentials.email);
+          return send(200, authData(credentials.email));
         }
         let isAdmin = false; let userId = null;
         try { isAdmin = JSON.parse(Buffer.from(req.headers.authorization.split(".")[1], "base64url").toString())[roleClaim] === "Admin"; } catch { /* Anonymous request */ }

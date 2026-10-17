@@ -179,11 +179,12 @@ test("logout during refresh clears immediately and cannot be undone by its respo
 });
 
 test("old API response cannot refresh or replay under a newer login", async () => {
-  const response = deferred();
-  const env = browser(() => response.promise);
+  const response = deferred(), started = deferred();
+  const env = browser(() => { started.resolve(); return response.promise; });
   const tab = env.tab();
   loginFixture(tab);
   const pending = tab.apiRequest("/api/orders", { method: "POST", json: { requestId: "old" } });
+  await started.promise;
   loginFixture(tab, "new-login");
   response.resolve(json({}, 401));
   await assert.rejects(pending, /session changed/);
@@ -281,4 +282,67 @@ test("an uncertain login cannot restore an unconfirmed cookie into the previous 
   assert.equal(tab.getSession(), null);
   assert.equal(await env.tab().restoreSession(), null);
   assert.equal(env.requests.length, 1);
+});
+
+test("UI state follows restore, uncertain renewal, successful login and logout", async () => {
+  const env = browser(() => json(authData("restored")));
+  const tab = env.tab();
+  const states = [];
+  const unsubscribe = tab.subscribeAuth(() => states.push(tab.getAuthState().status));
+  assert.equal(tab.getAuthState().status, "initializing");
+  await tab.restoreSession();
+  assert.equal(tab.getAuthState().status, "authenticated");
+  const key = tab.getSession().sessionKey;
+  assert.equal(tab.isCurrentSession(key), true);
+  env.setFetch(() => { throw new TypeError("private diagnostic detail"); });
+  await assert.rejects(tab.refreshSession(tab.getSession().token));
+  assert.equal(tab.getAuthState().status, "reauthenticationRequired");
+  assert.equal(tab.getAuthState().error.code, "renewal_uncertain");
+  assert.equal(tab.isCurrentSession(key), false);
+  assert.equal(tab.getAuthState().error.message.includes("private diagnostic"), false);
+  env.setFetch(() => json(authData("login")));
+  await tab.login({ email: "alice@example.test", password: "fixture" });
+  assert.equal(tab.getAuthState().status, "authenticated");
+  assert.equal(tab.getAuthState().error, null);
+  assert.equal(tab.isCurrentSession(key), false);
+  await tab.logout();
+  assert.equal(tab.getAuthState().status, "anonymous");
+  assert.equal(tab.isCurrentSession(""), false);
+  unsubscribe();
+  assert.ok(states.includes("reauthenticationRequired"));
+});
+
+test("malformed metadata requires login without replaying an unknown refresh cookie", async () => {
+  for (const value of ["{broken", "null", "[]", '"text"', '{"id":42}', '{"id":null,"pending":"false"}']) {
+    const env = browser(() => json(authData("login")));
+    env.values.set("shopHub.auth-state", value);
+    const tab = env.tab();
+    assert.equal(await tab.restoreSession(), null);
+    assert.equal(env.requests.length, 0);
+    assert.equal(tab.getAuthState().status, "reauthenticationRequired");
+    assert.equal(tab.getAuthState().error.code, "storage_unavailable");
+    await tab.login({ email: "alice@example.test", password: "fixture" });
+    assert.equal(tab.getAuthState().status, "authenticated");
+    assert.equal(tab.getAuthState().error, null);
+  }
+});
+
+test("missing cookie restores anonymously and token renewal preserves authenticated state", async () => {
+  const env = browser(() => json({}, 401));
+  const tab = env.tab();
+  await tab.restoreSession();
+  assert.equal(tab.getAuthState().status, "anonymous");
+  assert.equal(tab.getAuthState().error, null);
+  env.setFetch(() => json(authData("login")));
+  await tab.login({ email: "alice@example.test", password: "fixture" });
+  const key = tab.getSession().sessionKey;
+  const response = deferred(), started = deferred();
+  env.setFetch(() => { started.resolve(); return response.promise; });
+  const refresh = tab.refreshSession(tab.getSession().token);
+  await started.promise;
+  assert.equal(tab.getAuthState().status, "authenticated");
+  response.resolve(json(authData("renewed")));
+  await refresh;
+  assert.equal(tab.getAuthState().status, "authenticated");
+  assert.equal(tab.getSession().sessionKey, key);
 });

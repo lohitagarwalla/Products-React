@@ -30,7 +30,7 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
 
   try {
     const { apiRequest, ApiError } = await server.ssrLoadModule("/src/services/api.js");
-    const storage = await server.ssrLoadModule("/src/services/authStorage.js");
+    const storage = await server.ssrLoadModule("/src/services/authStore.js");
     const auth = await server.ssrLoadModule("/src/services/authService.js");
     let request;
     let nextResponse;
@@ -94,9 +94,12 @@ test("JWT requests, response statuses, and session lifecycle", async () => {
     ]) {
       const expiry = { accessTokenExpiresAt: new Date(Date.now() + 900000).toISOString(), refreshTokenExpiresAt: new Date(Date.now() + 604800000).toISOString() };
       nextResponse = json({ token: newToken, ...expiry }, 201);
-      assert.deepEqual(await method({ ...registration, phoneNumber: `  ${registration.phoneNumber}  ` }), {
-        token: newToken, ...expiry, user: { email: "test@example.com", firstName: "", lastName: "", phoneNumber: "" },
-      });
+      const session = await method({ ...registration, phoneNumber: `  ${registration.phoneNumber}  ` });
+      assert.equal(session, storage.getSession());
+      assert.equal(session.token, newToken);
+      assert.equal(session.accessTokenExpiresAt, expiry.accessTokenExpiresAt);
+      assert.equal(session.refreshTokenExpiresAt, expiry.refreshTokenExpiresAt);
+      assert.deepEqual(session.user, { id: null, email: "test@example.com", firstName: "", lastName: "", phoneNumber: "", roles: [] });
       assert.equal(request.headers.has("Authorization"), false);
       assert.equal(request.credentials, "include");
       assert.equal(request.method, "POST");

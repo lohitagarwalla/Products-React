@@ -16,6 +16,7 @@ import AuthenticatedRoute from "./components/AuthenticatedRoute";
 import Orders from "./pages/Orders";
 import OrderDetails from "./pages/OrderDetails";
 import Profile from "./pages/Profile";
+import AuthNotice from "./components/AuthNotice";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
       <CartProvider>
         <div className="app">
           <Navbar />
+          <AuthNotice />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
