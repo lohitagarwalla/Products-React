@@ -4,6 +4,7 @@ import { authMetadata, setAuthMetadata, initializeCoordinator, broadcastSession,
 let session = null;
 let initializing = true;
 let startupError = null;
+let retrying = false;
 const listeners = new Set();
 function changed() { for (const listener of listeners) listener(); }
 export function subscribeAuth(listener) {
@@ -18,8 +19,10 @@ export function getAuthState() {
     : startupError;
   const status = initializing ? "initializing"
     : error ? "reauthenticationRequired" : current ? "authenticated" : "anonymous";
-  return { status, session: current, error };
+  return { status, session: current, error, retrying,
+    canRetry: meta.blocked === true && meta.code === "renewal_retryable" && !meta.pending };
 }
+export function setRetrying(value) { retrying = value; changed(); }
 export function finishInitialization(error) {
   initializing = false;
   startupError = error ? { code: "restore_failed", message: error.message } : null;
@@ -77,7 +80,8 @@ export function clearSession(message = "", code = "session_expired") {
   changed();
 }
 export function blockRefresh(message, code = "renewal_uncertain") {
-  setAuthMetadata({ ...authMetadata(), blocked: true, pending: false, message, code });
+  setAuthMetadata({ ...authMetadata(), blocked: true, pending: false, message, code,
+    failureId: crypto.randomUUID() });
   broadcastChange();
   changed();
 }

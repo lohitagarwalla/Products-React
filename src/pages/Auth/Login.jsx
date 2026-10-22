@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Login() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, initializing } = useAuth();
+  const { login, initializing, isAuthenticated } = useAuth();
   const {
     register,
     handleSubmit,
@@ -23,6 +23,11 @@ export default function Login() {
     } else {
       setError(result.error);
     }
+  }
+
+  if (isAuthenticated) {
+    const from = location.state?.from;
+    return <Navigate to={typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/"} replace />;
   }
 
   return (

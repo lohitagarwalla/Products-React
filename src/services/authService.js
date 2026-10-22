@@ -1,7 +1,7 @@
 import { httpRequest, ApiError } from "./http";
 import { readJwt } from "./jwt";
-import { authMetadata, setAuthMetadata, requestPeerSession, coordinated } from "./authCoordinator";
-import { initializeAuthStorage, getSession, saveSession, clearSession, blockRefresh, finishInitialization } from "./authStore";
+import { authMetadata, setAuthMetadata, requestPeerSession, coordinated, broadcastChange } from "./authCoordinator";
+import { initializeAuthStorage, getSession, saveSession, clearSession, blockRefresh, finishInitialization, setRetrying } from "./authStore";
 export { isCurrentSession } from "./authStore";
 
 let refreshing;
@@ -44,33 +44,62 @@ export function authenticate(path, json) {
     }
   });
 }
+export function retrySession() {
+  const meta = authMetadata();
+  if (refreshing) return refreshing;
+  if (!meta.blocked || meta.code !== "renewal_retryable" || meta.pending || !meta.failureId) {
+    return Promise.reject(new Error(meta.message || "Please log in again."));
+  }
+  setRetrying(true);
+  return runRefresh(undefined, meta.failureId).finally(() => setRetrying(false));
+}
 export function refreshSession(failedToken) {
+  return runRefresh(failedToken);
+}
+function runRefresh(failedToken, retryFailureId) {
   initializeAuthStorage();
   if (refreshing) return refreshing;
   let expected = authMetadata().id;
   refreshing = coordinated(async () => {
     let meta = authMetadata();
     // A second tab can finish restoring while this startup waits for the lock.
-    if (!failedToken && !meta.blocked) expected = meta.id;
+    if (!retryFailureId && !failedToken && !meta.blocked) expected = meta.id;
     if (meta.id !== expected) throw changedError();
-    if (meta.blocked) throw new ApiError(401, { message: meta.message || "Please log in again." });
+    if (retryFailureId && (meta.failureId !== retryFailureId || meta.code !== "renewal_retryable")) {
+      if (!meta.blocked) { await requestPeerSession(); return getSession(); }
+      throw changedError();
+    }
+    if (meta.blocked && !retryFailureId) throw new ApiError(401, { message: meta.message || "Please log in again." });
     if (meta.pending) {
       blockRefresh("Session renewal was interrupted. Please log in again.", "renewal_interrupted");
       throw new Error("Session renewal was interrupted. Please log in again.");
     }
     await requestPeerSession();
     meta = authMetadata();
-    if (meta.id !== expected || meta.blocked) throw changedError();
+    if (meta.id !== expected || (meta.blocked && !retryFailureId)) throw changedError();
     const current = getSession();
-    if (current && current.token !== failedToken && current.expiresAt > Date.now() + 5000) return current;
+    if (!retryFailureId && current && current.token !== failedToken && current.expiresAt > Date.now() + 5000) return current;
     if (current?.refreshTokenExpiresAt && Date.parse(current.refreshTokenExpiresAt) <= Date.now()) {
       clearSession("Your session expired. Please log in again.");
       throw new ApiError(401, { message: "Your session expired. Please log in again." });
     }
     // A closed tab or lost rotation response must not cause automatic replay.
     setAuthMetadata({ ...meta, pending: true });
+    broadcastChange();
+    let retryableFailure = false;
     try {
-      const { data } = await cookieRequest("refresh");
+      let response;
+      try { response = await cookieRequest("refresh"); }
+      catch (error) {
+        // Only transport failures and server responses qualify for manual recovery.
+        if (authMetadata().id === expected && (error.status >= 500 && error.status <= 599
+          || error.name === "TypeError" || error.name === "TimeoutError" || error.name === "AbortError")) {
+          retryableFailure = true;
+          blockRefresh("Session renewal failed. Try again or log in.", "renewal_retryable");
+        }
+        throw error;
+      }
+      const { data } = response;
       if (authMetadata().id !== expected) throw changedError();
       const result = readSession(data, current?.user.email);
       const claims = readJwt(result.token);
@@ -80,7 +109,7 @@ export function refreshSession(failedToken) {
       }
       return saveSession(result.token, result, { ...result, sessionKey: meta.id || crypto.randomUUID() });
     } catch (error) {
-      if (authMetadata().id === expected) {
+      if (authMetadata().id === expected && !retryableFailure) {
         if (error.status === 401) clearSession(current || meta.id ? "Your session expired. Please log in again." : "");
         else blockRefresh(error.status === 400 || error.status === 403
           ? "Session renewal was rejected. Please log in again. If this continues, contact support."
@@ -96,7 +125,14 @@ export async function restoreSession() {
   let failure;
   try {
     initializeAuthStorage();
-    if (authMetadata().blocked) return getSession();
+    if (authMetadata().blocked) {
+      if (authMetadata().pending) await coordinated(async () => {
+        // An existing tab may still be completing the manual attempt.
+        if (authMetadata().pending) blockRefresh("Session renewal was interrupted. Please log in again.", "renewal_interrupted");
+        else if (!authMetadata().blocked) await requestPeerSession();
+      });
+      return getSession();
+    }
     return await refreshSession();
   } catch (error) {
     if (error.status === 401) return null;
@@ -125,6 +161,8 @@ export function signUp({ firstname, lastname, email, phoneNumber, password, conf
   return authenticate("register", { firstname, lastname, email, phoneNumber: phoneNumber.trim(), password, confirmPassword });
 }
 export async function getAccessSession(failedToken) {
+  const meta = authMetadata();
+  if (meta.blocked && getSession()) throw new ApiError(401, { message: meta.message || "Please log in again." });
   const current = getSession();
   if (current && (current.token === failedToken || current.expiresAt <= Date.now() + 5000)) {
     return refreshSession(failedToken || current.token);

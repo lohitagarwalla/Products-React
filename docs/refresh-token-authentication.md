@@ -45,7 +45,7 @@ The UI states are `initializing`, `authenticated`, `anonymous`, and
 `reauthenticationRequired`. Errors have a `code` and a user-facing `message`.
 Public pages render during restoration; protected routes, checkout and account
 actions wait. A normal background refresh keeps the authenticated state and
-session key, so forms are not remounted. An uncertain refresh requires sign-in
+session key, so forms are not remounted. A failed refresh requires recovery
 and removes account-dependent UI, while internal session identity remains
 available to the coordinator. New login and logout invalidate old UI work.
 
@@ -71,10 +71,19 @@ automatically retried, including uncertain order writes.
 
 - Refresh 401 clears frontend authentication and sends protected routes to login.
 - Refresh 400/403 is a request/origin configuration failure, not a retry trigger.
-- Lost refresh responses, timeouts, 5xx or invalid success bodies block further
-  automatic rotation until explicit sign-in. A persisted pending marker also
-  catches a tab closing mid-refresh. The UI enters `reauthenticationRequired` and
-  shows a concise sign-in message without raw transport details.
+- Network failures, timeouts and 5xx block automatic rotation but offer **Retry
+  session** and **Log in**. Retry eligibility persists across reloads; reload itself
+  does not retry. Each click permits one coordinated attempt. Concurrent clicks
+  for the same failure do not cause additional rotations, even if that attempt fails.
+  A successful retry restores authentication; 401 requires login; another eligible
+  failure offers Retry again. Business operations such as checkout are not replayed.
+- Manual retry accepts the risk that rotation committed but its cookie response
+  was lost: reusing the old cookie may revoke the affected session and require login.
+- Invalid success bodies, account mismatches, other HTTP errors, and legacy
+  `renewal_uncertain` metadata require login. A persisted pending marker catches
+  interruption. The UI enters `reauthenticationRequired`, and retained access tokens
+  cannot be sent by ordinary API calls while blocked. Transport details are not
+  included in the recovery notice.
 - Malformed coordination metadata requires explicit login without automatically
   replaying a cookie whose rotation state is unknown.
 - Logout clears local state immediately across tabs, then revokes the cookie

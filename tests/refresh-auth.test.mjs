@@ -297,7 +297,7 @@ test("UI state follows restore, uncertain renewal, successful login and logout",
   env.setFetch(() => { throw new TypeError("private diagnostic detail"); });
   await assert.rejects(tab.refreshSession(tab.getSession().token));
   assert.equal(tab.getAuthState().status, "reauthenticationRequired");
-  assert.equal(tab.getAuthState().error.code, "renewal_uncertain");
+  assert.equal(tab.getAuthState().error.code, "renewal_retryable");
   assert.equal(tab.isCurrentSession(key), false);
   assert.equal(tab.getAuthState().error.message.includes("private diagnostic"), false);
   env.setFetch(() => json(authData("login")));
@@ -345,4 +345,124 @@ test("missing cookie restores anonymously and token renewal preserves authentica
   await refresh;
   assert.equal(tab.getAuthState().status, "authenticated");
   assert.equal(tab.getSession().sessionKey, key);
+});
+
+test("server and network failures allow explicit recovery, never automatic replay or retained bearer use", async () => {
+  for (const failure of [() => json({}, 500), () => json({}, 502), () => json({}, 503),
+    () => { throw new TypeError("offline"); }, () => { throw new DOMException("timeout", "TimeoutError"); }]) {
+    const env = browser(() => json(authData("initial")));
+    const tab = env.tab();
+    await tab.restoreSession();
+    env.setFetch(failure);
+    await assert.rejects(tab.refreshSession(tab.getSession().token));
+    assert.equal(tab.getAuthState().canRetry, true);
+    const count = env.requests.length;
+    await assert.rejects(tab.apiRequest("/api/cart"));
+    await assert.rejects(tab.refreshSession());
+    assert.equal(env.requests.length, count);
+    const reloaded = env.tab();
+    await reloaded.restoreSession();
+    assert.equal(env.requests.length, count);
+    assert.equal(reloaded.getAuthState().canRetry, true);
+    env.setFetch(() => json(authData("recovered")));
+    await reloaded.retrySession();
+    assert.equal(reloaded.getAuthState().status, "authenticated");
+    assert.equal(reloaded.getAuthState().canRetry, false);
+    assert.equal(reloaded.getAuthState().error, null);
+    assert.equal(env.requests.length, count + 1);
+  }
+});
+
+test("manual retry handles another 503, then 401 requires login", async () => {
+  const env = browser(() => json({}, 503));
+  const tab = env.tab();
+  const old = loginFixture(tab);
+  await assert.rejects(tab.refreshSession(old.token));
+  await assert.rejects(tab.retrySession());
+  assert.equal(tab.getAuthState().canRetry, true);
+  assert.equal(env.requests.length, 2);
+  env.setFetch(() => json({}, 401));
+  await assert.rejects(tab.retrySession());
+  assert.equal(tab.getSession(), null);
+  assert.equal(tab.getAuthState().canRetry, false);
+  await assert.rejects(tab.retrySession());
+  assert.equal(env.requests.length, 3);
+});
+
+test("manual retry cannot bypass rejected, malformed, legacy or signed-out states", async () => {
+  for (const failure of [() => json({}, 400), () => json({}, 403), () => json({}, 429),
+    () => json({ token: jwt("invalid-response") })]) {
+    const env = browser(failure);
+    const tab = env.tab();
+    const old = loginFixture(tab);
+    await assert.rejects(tab.refreshSession(old.token));
+    assert.equal(tab.getAuthState().canRetry, false);
+    await assert.rejects(tab.retrySession());
+    assert.equal(env.requests.length, 1);
+  }
+  const env = browser(() => json(authData("unexpected")));
+  const tab = env.tab();
+  tab.blockRefresh("Old uncertain failure", "renewal_uncertain");
+  await assert.rejects(tab.retrySession());
+  tab.clearSession();
+  await assert.rejects(tab.retrySession());
+  assert.equal(env.requests.length, 0);
+});
+
+test("double clicks and simultaneous tab retries send only one attempt per failure", async () => {
+  for (const succeeds of [true, false]) {
+    const env = browser(() => json({}, 503));
+    const a = env.tab(), b = env.tab();
+    b.initializeAuthStorage();
+    const old = loginFixture(a);
+    await assert.rejects(a.refreshSession(old.token));
+    const started = deferred(), response = deferred();
+    env.setFetch(() => { started.resolve(); return response.promise; });
+    const attempts = Promise.allSettled([a.retrySession(), a.retrySession(), b.retrySession()]);
+    await started.promise;
+    assert.equal(a.getAuthState().retrying, true);
+    response.resolve(succeeds ? json(authData("recovered")) : json({}, 503));
+    await attempts;
+    assert.equal(env.requests.length, 2);
+    assert.equal(a.getAuthState().retrying, false);
+    assert.equal(a.getAuthState().canRetry, !succeeds);
+    assert.equal(b.getAuthState().canRetry, !succeeds);
+  }
+});
+
+test("logout or a new login during manual retry cannot be overwritten", async () => {
+  for (const change of ["logout", "login"]) {
+    const env = browser(() => json({}, 503));
+    const tab = env.tab();
+    const old = loginFixture(tab);
+    await assert.rejects(tab.refreshSession(old.token));
+    const started = deferred(), response = deferred();
+    env.setFetch(url => {
+      if (url.endsWith("/refresh")) { started.resolve(); return response.promise; }
+      return json({ message: "done" });
+    });
+    const retry = assert.rejects(tab.retrySession(), /session changed/);
+    await started.promise;
+    const logout = change === "logout" ? tab.logout() : Promise.resolve(loginFixture(tab, "new-login"));
+    response.resolve(json(authData("late")));
+    await Promise.all([retry, logout]);
+    assert.equal(tab.getSession()?.token ?? null, change === "logout" ? null : jwt("new-login"));
+  }
+});
+
+test("a tab opened during manual retry waits for its result without marking it interrupted", async () => {
+  const env = browser(() => json({}, 503));
+  const a = env.tab();
+  const old = loginFixture(a);
+  await assert.rejects(a.refreshSession(old.token));
+  const started = deferred(), response = deferred();
+  env.setFetch(() => { started.resolve(); return response.promise; });
+  const retry = a.retrySession();
+  await started.promise;
+  const b = env.tab();
+  const restore = b.restoreSession();
+  response.resolve(json(authData("recovered")));
+  await Promise.all([retry, restore]);
+  assert.equal(b.getAuthState().status, "authenticated");
+  assert.equal(env.requests.length, 2);
 });

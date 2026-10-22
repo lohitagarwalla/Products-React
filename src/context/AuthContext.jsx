@@ -26,6 +26,8 @@ export default function AuthProvider({ children }) {
       signUp: credentials => authenticate(authService.signUp, credentials),
       login: credentials => authenticate(authService.login, credentials),
       logout: () => authService.logout().catch(() => {}),
+      retrySession: () => authenticate(authService.retrySession),
+      canRetry: state.canRetry, retrying: state.retrying,
       status: state.status, error: state.error,
       user: session?.user ?? null, roles: session?.user.roles ?? [],
       isAdmin: session?.user.roles.includes("Admin") ?? false,
