@@ -18,9 +18,10 @@ export function getAuthState() {
     ? { code: meta.code || "reauthentication_required", message: String(meta.message) }
     : startupError;
   const status = initializing ? "initializing"
-    : error ? "reauthenticationRequired" : current ? "authenticated" : "anonymous";
+    : current && (!error || meta.code === "renewal_retryable") ? "authenticated"
+      : error ? "reauthenticationRequired" : "anonymous";
   return { status, session: current, error, retrying,
-    canRetry: meta.blocked === true && meta.code === "renewal_retryable" && !meta.pending };
+    canRetry: meta.code === "renewal_retryable" && !meta.pending };
 }
 export function setRetrying(value) { retrying = value; changed(); }
 export function finishInitialization(error) {
@@ -82,6 +83,13 @@ export function clearSession(message = "", code = "session_expired") {
 export function blockRefresh(message, code = "renewal_uncertain") {
   setAuthMetadata({ ...authMetadata(), blocked: true, pending: false, message, code,
     failureId: crypto.randomUUID() });
+  broadcastChange();
+  changed();
+}
+export function allowRefreshRecovery() {
+  setAuthMetadata({ ...authMetadata(), blocked: false, pending: false,
+    message: "Session renewal failed. Your next request will try again, or you can retry now.",
+    code: "renewal_retryable", failureId: crypto.randomUUID() });
   broadcastChange();
   changed();
 }

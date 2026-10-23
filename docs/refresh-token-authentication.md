@@ -45,9 +45,10 @@ The UI states are `initializing`, `authenticated`, `anonymous`, and
 `reauthenticationRequired`. Errors have a `code` and a user-facing `message`.
 Public pages render during restoration; protected routes, checkout and account
 actions wait. A normal background refresh keeps the authenticated state and
-session key, so forms are not remounted. A failed refresh requires recovery
-and removes account-dependent UI, while internal session identity remains
-available to the coordinator. New login and logout invalidate old UI work.
+session key, so forms are not remounted. A temporary refresh failure preserves
+the existing account UI and shows a recovery notice. API requests must renew the
+session before proceeding; an expired token is never used as a fallback. New
+login and logout invalidate old UI work.
 
 On startup, a tab asks other tabs for a current access token under a shared Web
 Lock, otherwise it refreshes with the cookie. Concurrent startup/401 calls share
@@ -71,17 +72,19 @@ automatically retried, including uncertain order writes.
 
 - Refresh 401 clears frontend authentication and sends protected routes to login.
 - Refresh 400/403 is a request/origin configuration failure, not a retry trigger.
-- Network failures, timeouts and 5xx block automatic rotation but offer **Retry
-  session** and **Log in**. Retry eligibility persists across reloads; reload itself
-  does not retry. Each click permits one coordinated attempt. Concurrent clicks
-  for the same failure do not cause additional rotations, even if that attempt fails.
-  A successful retry restores authentication; 401 requires login; another eligible
-  failure offers Retry again. Business operations such as checkout are not replayed.
-- Manual retry accepts the risk that rotation committed but its cookie response
+- Network failures, timeouts and 5xx leave `blocked: false` and clear `pending`.
+  The next API request, page reload or **Retry session** click may renew again.
+  There is no immediate retry loop or background retry timer. Concurrent requests
+  share an attempt; tabs already waiting for a failed attempt do not cascade retries.
+  Successful renewal clears the notice; 401 requires login. Previously persisted
+  `renewal_retryable` and `renewal_interrupted` blocks also allow recovery.
+  Failed business operations such as checkout are not automatically resubmitted.
+- Recovery accepts the risk that rotation committed but its cookie response
   was lost: reusing the old cookie may revoke the affected session and require login.
 - Invalid success bodies, account mismatches, other HTTP errors, and legacy
-  `renewal_uncertain` metadata require login. A persisted pending marker catches
-  interruption. The UI enters `reauthenticationRequired`, and retained access tokens
+  `renewal_uncertain` metadata require login. An unfinished pending attempt can be
+  retried after acquiring the cross-tab lock. For nonrecoverable failures, the UI
+  enters `reauthenticationRequired`, and retained access tokens
   cannot be sent by ordinary API calls while blocked. Transport details are not
   included in the recovery notice.
 - Malformed coordination metadata requires explicit login without automatically

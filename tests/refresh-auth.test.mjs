@@ -142,19 +142,22 @@ test("refresh 401 ends session; a failed retry cannot recurse; 403 never refresh
   assert.ok(tab.getSession());
 });
 
-test("lost refresh response and interrupted tab prevent another automatic rotation, including after reload", async () => {
+test("lost refresh response and interrupted tab allow recovery on a later request or reload", async () => {
   const env = browser(() => { throw new TypeError("Failed to fetch"); });
   const tab = env.tab();
   const old = loginFixture(tab);
   await assert.rejects(tab.refreshSession(old.token), /Failed to fetch/);
   await assert.rejects(tab.refreshSession(old.token));
   const reloaded = env.tab();
-  assert.equal(await reloaded.restoreSession(), null);
-  assert.equal(env.requests.length, 1);
+  await assert.rejects(reloaded.restoreSession(), /Failed to fetch/);
+  assert.equal(env.requests.length, 3);
+  assert.equal(tab.authMetadata().blocked, false);
   assert.equal(tab.getSession().token, old.token);
   tab.setAuthMetadata({ id: "interrupted", pending: true });
-  await assert.rejects(reloaded.restoreSession(), /interrupted/);
-  assert.equal(env.requests.length, 1);
+  env.setFetch(() => json(authData("recovered")));
+  await reloaded.restoreSession();
+  assert.equal(reloaded.getAuthState().status, "authenticated");
+  assert.equal(env.requests.length, 4);
 });
 
 test("logout during refresh clears immediately and cannot be undone by its response", async () => {
@@ -224,7 +227,7 @@ test("failed logout stays signed out across reloads", async () => {
 });
 
 test("refresh configuration failures and malformed success do not loop or erase an access session", async () => {
-  for (const response of [() => json({}, 400), () => json({}, 403), () => json({}, 500), () => json({ token: jwt("new") })]) {
+  for (const response of [() => json({}, 400), () => json({}, 403), () => json({ token: jwt("new") })]) {
     const env = browser(response);
     const tab = env.tab();
     const old = loginFixture(tab);
@@ -296,9 +299,9 @@ test("UI state follows restore, uncertain renewal, successful login and logout",
   assert.equal(tab.isCurrentSession(key), true);
   env.setFetch(() => { throw new TypeError("private diagnostic detail"); });
   await assert.rejects(tab.refreshSession(tab.getSession().token));
-  assert.equal(tab.getAuthState().status, "reauthenticationRequired");
+  assert.equal(tab.getAuthState().status, "authenticated");
   assert.equal(tab.getAuthState().error.code, "renewal_retryable");
-  assert.equal(tab.isCurrentSession(key), false);
+  assert.equal(tab.isCurrentSession(key), true);
   assert.equal(tab.getAuthState().error.message.includes("private diagnostic"), false);
   env.setFetch(() => json(authData("login")));
   await tab.login({ email: "alice@example.test", password: "fixture" });
@@ -309,7 +312,7 @@ test("UI state follows restore, uncertain renewal, successful login and logout",
   assert.equal(tab.getAuthState().status, "anonymous");
   assert.equal(tab.isCurrentSession(""), false);
   unsubscribe();
-  assert.ok(states.includes("reauthenticationRequired"));
+  assert.ok(states.includes("authenticated"));
 });
 
 test("malformed metadata requires login without replaying an unknown refresh cookie", async () => {
@@ -347,7 +350,7 @@ test("missing cookie restores anonymously and token renewal preserves authentica
   assert.equal(tab.getSession().sessionKey, key);
 });
 
-test("server and network failures allow explicit recovery, never automatic replay or retained bearer use", async () => {
+test("server and network failures recover on the next API request without retrying in a loop", async () => {
   for (const failure of [() => json({}, 500), () => json({}, 502), () => json({}, 503),
     () => { throw new TypeError("offline"); }, () => { throw new DOMException("timeout", "TimeoutError"); }]) {
     const env = browser(() => json(authData("initial")));
@@ -356,20 +359,24 @@ test("server and network failures allow explicit recovery, never automatic repla
     env.setFetch(failure);
     await assert.rejects(tab.refreshSession(tab.getSession().token));
     assert.equal(tab.getAuthState().canRetry, true);
+    assert.equal(tab.authMetadata().blocked, false);
     const count = env.requests.length;
     await assert.rejects(tab.apiRequest("/api/cart"));
-    await assert.rejects(tab.refreshSession());
-    assert.equal(env.requests.length, count);
+    assert.equal(env.requests.length, count + 1);
+    assert.equal(env.requests.at(-1).url.endsWith("/refresh"), true);
+    env.setFetch(url => url.endsWith("/refresh") ? json(authData("recovered")) : json({ ok: true }));
+    assert.equal((await tab.apiRequest("/api/cart")).data.ok, true);
+    assert.equal(tab.getAuthState().error, null);
+    assert.equal(env.requests.length, count + 3);
+    env.setFetch(failure);
+    await assert.rejects(tab.refreshSession(tab.getSession().token));
     const reloaded = env.tab();
+    env.setFetch(() => json(authData("restored")));
     await reloaded.restoreSession();
-    assert.equal(env.requests.length, count);
-    assert.equal(reloaded.getAuthState().canRetry, true);
-    env.setFetch(() => json(authData("recovered")));
-    await reloaded.retrySession();
     assert.equal(reloaded.getAuthState().status, "authenticated");
     assert.equal(reloaded.getAuthState().canRetry, false);
     assert.equal(reloaded.getAuthState().error, null);
-    assert.equal(env.requests.length, count + 1);
+    assert.equal(env.requests.length, count + 5);
   }
 });
 
@@ -465,4 +472,52 @@ test("a tab opened during manual retry waits for its result without marking it i
   await Promise.all([retry, restore]);
   assert.equal(b.getAuthState().status, "authenticated");
   assert.equal(env.requests.length, 2);
+});
+
+test("automatic recovery receiving 401 ends the session without calling the business endpoint", async () => {
+  const env = browser(() => json({}, 503));
+  const tab = env.tab();
+  const old = loginFixture(tab);
+  await assert.rejects(tab.refreshSession(old.token));
+  env.setFetch(() => json({}, 401));
+  await assert.rejects(tab.apiRequest("/api/cart"), error => error.status === 401);
+  assert.equal(env.requests.length, 2);
+  assert.ok(env.requests.every(req => req.url.endsWith("/refresh")));
+  assert.equal(tab.getSession(), null);
+  const count = env.requests.length;
+  await tab.restoreSession();
+  assert.equal(env.requests.length, count);
+});
+
+test("previously saved retryable and interrupted blocks recover automatically on reload", async () => {
+  for (const code of ["renewal_retryable", "renewal_interrupted"]) {
+    const env = browser(() => json(authData("recovered")));
+    const tab = env.tab();
+    tab.setAuthMetadata({ id: "old-session", blocked: true, pending: false, code,
+      failureId: "old-failure", message: "Previous policy blocked refresh" });
+    await tab.restoreSession();
+    assert.equal(tab.getAuthState().status, "authenticated");
+    assert.equal(tab.authMetadata().blocked, false);
+    assert.equal(env.requests.length, 1);
+  }
+});
+
+test("concurrent automatic recovery shares one failed rotation across tabs", async () => {
+  const env = browser(() => json({}, 503));
+  const a = env.tab(), b = env.tab();
+  b.initializeAuthStorage();
+  const old = loginFixture(a);
+  await assert.rejects(a.refreshSession(old.token));
+  const started = deferred(), response = deferred();
+  env.setFetch(() => { started.resolve(); return response.promise; });
+  const attempts = Promise.allSettled([a.apiRequest("/api/cart"), a.apiRequest("/api/orders"), b.apiRequest("/api/cart")]);
+  await started.promise;
+  response.resolve(json({}, 503));
+  const results = await attempts;
+  assert.ok(results.every(result => result.status === "rejected"));
+  assert.equal(env.requests.length, 2);
+  assert.equal(a.authMetadata().blocked, false);
+  env.setFetch(url => url.endsWith("/refresh") ? json(authData("recovered")) : json({ ok: true }));
+  assert.equal((await a.apiRequest("/api/cart")).data.ok, true);
+  assert.equal(env.requests.length, 4);
 });
