@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-export default function NavDropdown({ label, children }) {
+export default function NavDropdown({ label, children, icon = false }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
   const buttonRef = useRef(null);
@@ -17,7 +17,7 @@ export default function NavDropdown({ label, children }) {
 
   return (
     <div
-      className="admin-menu"
+      className={`admin-menu${icon ? " navbar-profile-menu" : ""}`}
       ref={containerRef}
       onBlur={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
@@ -31,16 +31,16 @@ export default function NavDropdown({ label, children }) {
     >
       <button
         type="button"
-        className="admin-menu-toggle"
+        className={icon ? "admin-menu-toggle navbar-profile-toggle" : "admin-menu-toggle"}
         ref={buttonRef}
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen(value => !value)}
       >
         <span>{label}</span>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        {!icon && <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        </svg>}
       </button>
       <div id={menuId} className="admin-menu-dropdown" hidden={!open}>
         <div className="admin-menu-panel">

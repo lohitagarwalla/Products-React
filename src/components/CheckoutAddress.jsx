@@ -69,7 +69,7 @@ export default function CheckoutAddress({ isAuthenticated, userId, addressState,
       {isAuthenticated && userId && <button ref={trigger} type="button" className="btn btn-secondary" disabled={disabled || !addresses.length}
         onClick={openSelector}>{selectedAddress ? "Change address" : "Select address"}</button>}
     </div>
-    {!isAuthenticated ? <p><Link to="/login" state={{ from: "/checkout" }}>Log in</Link> to view your saved addresses.</p>
+    {!isAuthenticated ? <p><Link to="/login" state={{ from: "/cart" }}>Log in</Link> to view your saved addresses.</p>
       : !userId ? <p role="alert">Please log out and log in again to load your addresses.</p> : <>
         {loading && <p role="status">Loading addresses…</p>}
         {error && <div role="alert"><p className="error-message">{error}</p><button type="button" className="btn btn-secondary" disabled={disabled || loading} onClick={refresh}>Retry addresses</button></div>}

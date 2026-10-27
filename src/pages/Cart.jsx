@@ -13,13 +13,13 @@ import useCheckoutAddress from "../hooks/useCheckoutAddress";
 import CheckoutAddress from "../components/CheckoutAddress";
 import { deliveryAddressSnapshot } from "../services/checkoutAddress";
 
-export default function Checkout() {
+export default function Cart() {
   const { sessionKey, initializing } = useAuth();
   if (initializing) return <p role="status">Restoring your session…</p>;
-  return <CheckoutContent key={sessionKey} />;
+  return <CartContent key={sessionKey} />;
 }
 
-function CheckoutContent() {
+function CartContent() {
   const { cartItems, updateQuantity, removeFromCart, totals, refreshCart, refreshing,
     cartError, saving, locked, clearCart } = useCart();
   const { user, isAuthenticated, sessionKey } = useAuth();
@@ -84,7 +84,7 @@ function CheckoutContent() {
   }
 
   return <main className="page checkout-page"><div className="container">
-    <h1 className="page-title">Checkout</h1>
+    <h1 className="page-title">Cart</h1>
     {(error || storageError) && <p className="error-message" role="alert">{error || storageError}</p>}
     {pending && <section className="panel" aria-label="Pending checkout">
       <h2>Finish your pending checkout</h2>
@@ -108,7 +108,7 @@ function CheckoutContent() {
     {refreshing && <p role="status">Checking current prices and availability…</p>}
     {saving && <p role="status">Saving cart…</p>}
     {cartError && <div className="error-message" role="alert">{cartError} <button className="btn btn-secondary" disabled={busy || saving || refreshing} onClick={refreshCart}>Reload cart</button></div>}
-    {!isAuthenticated ? <p className="empty-state"><Link to="/login" state={{ from: "/checkout" }}>Log in</Link> to load your saved cart.</p> : !cartItems.length ? (!refreshing && !cartError && <p className="empty-state">Your cart is empty. <Link to="/">Browse products</Link></p>) :
+    {!isAuthenticated ? <p className="empty-state"><Link to="/login" state={{ from: "/cart" }}>Log in</Link> to load your saved cart.</p> : !cartItems.length ? (!refreshing && !cartError && <p className="empty-state">Your cart is empty. <Link to="/">Browse products</Link></p>) :
       <div className="checkout-container"><div className="checkout-main">
       <CheckoutAddress isAuthenticated={isAuthenticated} userId={user?.id} addressState={addressState} disabled={busy || locked} />
       <section className="checkout-items"><div className="page-heading"><h2>Order summary</h2>
@@ -129,7 +129,7 @@ function CheckoutContent() {
       </section></div><section className="checkout-summary"><h2>Estimated total</h2>
         {Object.entries(totals).map(([currency, total]) => <div className="checkout-total" key={currency}><span>{currency}</span><strong>{formatPrice(total, currency)}</strong></div>)}
         {validation && <p className="form-error">{validation}</p>}
-        {!isAuthenticated ? <Link className="btn btn-primary btn-block" to="/login" state={{ from: "/checkout" }}>Log in to place order</Link> :
+        {!isAuthenticated ? <Link className="btn btn-primary btn-block" to="/login" state={{ from: "/cart" }}>Log in to place order</Link> :
           <button className="btn btn-primary btn-block" disabled={busy || locked || refreshing || !!cartError || !!validation || !user?.id || addressState.loading || !!addressState.error || !addressState.selectedAddress} onClick={submit}>{busy ? "Placing order…" : "Place order"}</button>}
         {isAuthenticated && !addressState.loading && !addressState.selectedAddress && <p className="form-error">Select a delivery address before placing your order.</p>}
         {isAuthenticated && !user?.id && <p role="alert">Please log out and log in again to place an order.</p>}

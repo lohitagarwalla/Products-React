@@ -19,7 +19,7 @@ function cookieRequest(path, json) {
   return httpRequest(`/api/auth/${path}`, {
     method: "POST", credentials: "include", cache: "no-store", json,
     headers: json === undefined ? { "X-Refresh-Token": "1" } : undefined,
-    signal: AbortSignal.timeout(path === "refresh" ? 120000 : 30000),
+    signal: AbortSignal.timeout(120000),
   });
 }
 export function authenticate(path, json) {
