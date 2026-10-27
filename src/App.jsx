@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Auth/Login";
 import Signup from "./pages/Auth/Signup";
-import Checkout from "./pages/Checkout";
+import Cart from "./pages/Cart";
 import Navbar from "./components/Navbar";
 
 import "./App.css";
@@ -30,7 +30,8 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/auth" element={<Navigate to="/signup" replace />} />
-            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/checkout" element={<Navigate to="/cart" replace />} />
             <Route path="/products/:id" element={<ProductDetails />} />
             <Route element={<AuthenticatedRoute />}>
               <Route path="/profile" element={<Profile />} />
