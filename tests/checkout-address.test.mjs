@@ -14,37 +14,30 @@ test("checkout snapshots delivery fields and strips profile metadata", () => {
   assert.throws(() => deliveryAddressSnapshot(null), /Select a delivery address/);
 });
 
-test("order retries retain the original delivery snapshot and exclude local metadata", () => {
+test("order retries retain the address ID and exclude client address details and metadata", () => {
   const savedAddress = { ...address, phoneNumber: "+919123456789" };
-  const attempt = { requestId: "request", items: [{ productId: 7, quantity: 2, price: 123 }],
-    deliveryAddress: deliveryAddressSnapshot(savedAddress), selectedAddressId: 2, cartInstance: "cart" };
+  const attempt = { requestId: "request", addressId: savedAddress.id,
+    items: [{ productId: 7, quantity: 2, price: 123 }],
+    deliveryAddress: deliveryAddressSnapshot(savedAddress), cartInstance: "cart" };
   const first = buildOrderRequest(attempt);
+  savedAddress.id = 9;
   savedAddress.addressLine1 = "Changed after submitting";
-  savedAddress.phoneNumber = "+918123456789";
-  const recoveredAttempt = JSON.parse(JSON.stringify(attempt));
-  assert.deepEqual(buildOrderRequest(recoveredAttempt), first);
-  assert.equal(first.deliveryAddress.addressLine1, "1 Main St");
-  assert.equal(first.deliveryAddress.phoneNumber, "+919123456789");
-  assert.deepEqual(first.items, [{ productId: 7, quantity: 2 }]);
-  assert.deepEqual(Object.keys(first), ["requestId", "items", "deliveryAddress"]);
+  assert.deepEqual(buildOrderRequest(JSON.parse(JSON.stringify(attempt))), first);
+  assert.deepEqual(first, { requestId: "request", items: [{ productId: 7, quantity: 2 }], addressId: 2 });
 });
 
-test("checkout snapshots and requests preserve optional phone numbers", () => {
+test("checkout display snapshots preserve optional phone numbers", () => {
   for (const phoneNumber of ["+919123456789", null, ""]) {
     const snapshot = deliveryAddressSnapshot({ ...address, phoneNumber });
     assert.equal(snapshot.phoneNumber, phoneNumber);
-    const request = buildOrderRequest({ requestId: "request", items: [{ productId: 7, quantity: 2 }], deliveryAddress: snapshot });
-    assert.equal(request.deliveryAddress.phoneNumber, phoneNumber);
+
   }
 });
 
-test("older pending addresses without phones retain their original request on retry", () => {
-  const attempt = { requestId: "old", items: [{ productId: 7, quantity: 2 }], deliveryAddress: deliveryAddressSnapshot(address) };
-  const request = buildOrderRequest(JSON.parse(JSON.stringify(attempt)));
-  assert.equal(Object.hasOwn(request.deliveryAddress, "phoneNumber"), false);
-  assert.deepEqual(request, attempt);
-});
-
-test("legacy pending checkouts cannot silently gain a different delivery address", () => {
-  assert.throws(() => buildOrderRequest({ requestId: "old", items: [{ productId: 7, quantity: 2 }] }), /older checkout/);
+test("legacy pending checkouts and invalid IDs cannot silently select a different address", () => {
+  for (const addressId of [undefined, null, 0, -1, 1.5, "2"]) {
+    const attempt = { requestId: "old", addressId, items: [{ productId: 7, quantity: 2 }],
+      deliveryAddress: deliveryAddressSnapshot(address) };
+    assert.throws(() => buildOrderRequest(attempt), /older checkout/);
+  }
 });

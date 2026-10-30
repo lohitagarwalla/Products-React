@@ -1,5 +1,5 @@
 // Disposable in-memory browser fixture; never used by the application build.
-export function orderFixture(products, purchased = () => {}) {
+export function orderFixture(products, purchased = () => {}, findAddress = () => null) {
   const orders = new Map();
   const requests = new Map();
   let nextId = 1;
@@ -13,16 +13,18 @@ export function orderFixture(products, purchased = () => {}) {
     if (path === "/api/orders" && req.method === "POST") {
       const input = json();
       const key = `${userId}:${input.requestId}`;
-      if (!input.deliveryAddress) return respond(400, { detail: "Delivery address required." });
-      const signature = JSON.stringify({ items: [...input.items].sort((a, b) => a.productId - b.productId), deliveryAddress: input.deliveryAddress });
+      if (!Number.isInteger(input.addressId) || input.addressId <= 0) return respond(400, { detail: "Address ID required." });
+      const signature = JSON.stringify({ items: [...input.items].sort((a, b) => a.productId - b.productId), addressId: input.addressId });
       if (requests.has(key)) {
         const prior = requests.get(key);
         return prior.signature === signature ? respond(200, orders.get(prior.id)) : respond(409, { detail: "Request ID already used with different items." });
       }
+      const address = findAddress(userId, input.addressId);
+      if (!address) return respond(404, { detail: "Delivery address not found." });
       if (input.items.some(item => !products.get(item.productId)?.isPublished)) return respond(400, { detail: "Product unavailable." });
       const now = new Date().toISOString();
       const order = { id: nextId++, orderNumber: `ORD-FIXTURE-${String(nextId - 1).padStart(5, "0")}`, userId,
-        status: "Placed", currency: "INR", deliveryAddress: structuredClone(input.deliveryAddress), createdAt: now, shippedAt: null, deliveredAt: null, cancelledAt: null,
+        status: "Placed", currency: "INR", deliveryAddress: structuredClone(address), createdAt: now, shippedAt: null, deliveredAt: null, cancelledAt: null,
         cancelledByUserId: null, cancellationReason: null,
         items: input.items.map((item, index) => ({ id: index + 1, productId: item.productId, quantity: item.quantity,
           productTitle: products.get(item.productId).title, unitPrice: products.get(item.productId).price,

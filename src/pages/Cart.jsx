@@ -33,7 +33,7 @@ function CartContent() {
   const navigate = useNavigate();
   const validation = checkoutValidation(cartItems);
   const pendingId = pending?.requestId;
-  const legacyPending = !!pending && !pending.deliveryAddress;
+  const legacyPending = !!pending && (!Number.isInteger(pending.addressId) || pending.addressId <= 0);
 
   useEffect(() => {
     if (pendingId || storageError) return;
@@ -49,10 +49,12 @@ function CartContent() {
     let sent = false;
     try {
       attempt = readCheckout(user.id);
-      if (attempt && !attempt.deliveryAddress) throw new Error("This older checkout has no saved delivery address. Review My orders before starting a new checkout.");
+      if (attempt && (!Number.isInteger(attempt.addressId) || attempt.addressId <= 0)) throw new Error("This older checkout has no saved address ID. Review My orders before starting a new checkout.");
       if (!attempt) {
         if (locked || validation || refreshing || cartError || addressState.loading || addressState.error) throw new Error(validation || cartError || addressState.error || "Please wait for the cart and address to finish loading.");
-        attempt = { requestId: newRequestId(), deliveryAddress: deliveryAddressSnapshot(addressState.selectedAddress),
+        if (!addressState.selectedAddress?.id) throw new Error("Select a delivery address before placing your order.");
+        attempt = { requestId: newRequestId(), addressId: addressState.selectedAddress.id,
+          deliveryAddress: deliveryAddressSnapshot(addressState.selectedAddress),
           items: cartItems.map(item => ({ productId: item.id, quantity: item.quantity })),
         };
         saveCheckout(user.id, attempt);
@@ -66,7 +68,7 @@ function CartContent() {
       navigate(`/orders/${order.id}`, { replace: true, state: { orderConfirmed: true } });
     } catch (failure) {
       if (!isCurrentSession(sessionKey)) return;
-      setRejected(failure.status === 400);
+      setRejected(failure.status === 400 || failure.status === 404);
       setError(failure.status === 409
         ? "This checkout ID is associated with different items or delivery details. Review My orders before resolving the saved checkout."
         : failure.status == null && sent
@@ -93,7 +95,7 @@ function CartContent() {
       {pending.deliveryAddress && <p>Delivery to {pending.deliveryAddress.recipientName}: {[pending.deliveryAddress.addressLine1, pending.deliveryAddress.addressLine2, pending.deliveryAddress.city, pending.deliveryAddress.state, pending.deliveryAddress.postalCode, pending.deliveryAddress.countryCode].filter(Boolean).join(", ")}
         {pending.deliveryAddress.phoneNumber && <> · Phone: {pending.deliveryAddress.phoneNumber}</>}
       </p>}
-      {legacyPending && <p className="error-message" role="alert">This older attempt has no saved delivery address and cannot be retried. Review My orders before starting a new checkout.</p>}
+      {legacyPending && <p className="error-message" role="alert">This older attempt has no saved address ID and cannot be retried. Review My orders before starting a new checkout.</p>}
       <div className="toolbar">
         <button className="btn btn-primary" disabled={busy || legacyPending} onClick={submit}>{busy ? "Confirming order…" : "Retry checkout"}</button>
         {rejected && <button className="btn btn-secondary" disabled={busy} onClick={editRejectedCheckout}>Edit rejected checkout</button>}
@@ -108,10 +110,10 @@ function CartContent() {
     {refreshing && <p role="status">Checking current prices and availability…</p>}
     {saving && <p role="status">Saving cart…</p>}
     {cartError && <div className="error-message" role="alert">{cartError} <button className="btn btn-secondary" disabled={busy || saving || refreshing} onClick={refreshCart}>Reload cart</button></div>}
-    {!isAuthenticated ? <p className="empty-state"><Link to="/login" state={{ from: "/cart" }}>Log in</Link> to load your saved cart.</p> : !cartItems.length ? (!refreshing && !cartError && <p className="empty-state">Your cart is empty. <Link to="/">Browse products</Link></p>) :
+    {!isAuthenticated ? <p className="empty-state"><Link to="/login" state={{ from: "/cart" }}>Log in</Link> to load your saved cart.</p> :
       <div className="checkout-container"><div className="checkout-main">
       <CheckoutAddress isAuthenticated={isAuthenticated} userId={user?.id} addressState={addressState} disabled={busy || locked} />
-      <section className="checkout-items"><div className="page-heading"><h2>Order summary</h2>
+      {!cartItems.length ? (!refreshing && !cartError && <p className="empty-state">Your cart is empty. <Link to="/">Go to the home page</Link> to add products to your cart.</p>) : <section className="checkout-items"><div className="page-heading"><h2>Order summary</h2>
         <button className="btn btn-secondary btn-small" disabled={busy || locked} onClick={clearCart}>Clear cart</button>
       </div>
         {cartItems.map(item => <div className="checkout-item" key={item.id}>
@@ -126,13 +128,13 @@ function CartContent() {
             <button className="btn btn-secondary btn-small" disabled={locked || busy} onClick={() => removeFromCart(item.id)}>Remove</button>
           </div>
         </div>)}
-      </section></div><section className="checkout-summary"><h2>Estimated total</h2>
+      </section>}</div>{cartItems.length > 0 && <section className="checkout-summary"><h2>Estimated total</h2>
         {Object.entries(totals).map(([currency, total]) => <div className="checkout-total" key={currency}><span>{currency}</span><strong>{formatPrice(total, currency)}</strong></div>)}
         {validation && <p className="form-error">{validation}</p>}
         {!isAuthenticated ? <Link className="btn btn-primary btn-block" to="/login" state={{ from: "/cart" }}>Log in to place order</Link> :
           <button className="btn btn-primary btn-block" disabled={busy || locked || refreshing || !!cartError || !!validation || !user?.id || addressState.loading || !!addressState.error || !addressState.selectedAddress} onClick={submit}>{busy ? "Placing order…" : "Place order"}</button>}
         {isAuthenticated && !addressState.loading && !addressState.selectedAddress && <p className="form-error">Select a delivery address before placing your order.</p>}
         {isAuthenticated && !user?.id && <p role="alert">Please log out and log in again to place an order.</p>}
-      </section></div>}
+      </section>}</div>}
   </div></main>;
 }

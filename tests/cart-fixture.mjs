@@ -25,7 +25,12 @@ export function cartFixture(products) {
       }) };
   };
   return {
-    purchased(userId, items) { for (const item of items) getCart(userId).items.delete(item.productId); },
+    findAddress(userId, addressId) { return getAddresses(userId).find(address => address.id === addressId); },
+    purchased(userId, items) {
+      const cart = getCart(userId);
+      for (const item of items) cart.items.delete(item.productId);
+      cart.selectedAddressId = getAddresses(userId).find(address => address.isDefault)?.id ?? null;
+    },
     handle({ req, path, json, send, userId }) {
       if (!path.startsWith("/api/cart") && path !== "/api/profile/addresses") return false;
       if (!userId) { send(401, { title: "Log in" }); return true; }
