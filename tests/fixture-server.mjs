@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 const roleClaim = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
 const products = new Map();
 const savedCarts = cartFixture(products);
-const handleOrders = orderFixture(products, savedCarts.purchased);
+const handleOrders = orderFixture(products, savedCarts.purchased, savedCarts.findAddress);
 const images = new Map();
 let nextProduct = 1;
 let nextImage = 1;

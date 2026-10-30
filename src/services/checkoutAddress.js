@@ -7,8 +7,8 @@ export function deliveryAddressSnapshot(address) {
   return snapshot;
 }
 
-export function buildOrderRequest({ requestId, items, deliveryAddress }) {
-  if (!deliveryAddress) throw new Error("This older checkout has no saved delivery address. Review My orders before starting a new checkout.");
+export function buildOrderRequest({ requestId, items, addressId }) {
+  if (!Number.isInteger(addressId) || addressId <= 0) throw new Error("This older checkout has no saved address ID. Review My orders before starting a new checkout.");
   return { requestId, items: items.map(({ productId, quantity }) => ({ productId, quantity })),
-    deliveryAddress: deliveryAddressSnapshot(deliveryAddress) };
+    addressId };
 }
